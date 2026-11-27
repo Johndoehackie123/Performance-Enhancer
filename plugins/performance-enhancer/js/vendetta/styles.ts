@@ -11,7 +11,7 @@
  * surface, but it can never introduce one, so a bad selector degrades to "no
  * visual change" instead of a broken screen.
  */
-import { api, jsxRuntime } from './bridge'
+import { apiOrNull, jsxRuntime } from './bridge'
 import { buildMediaStyle, buildPanelStyle, ROUND_AVATAR_STYLE } from '../styles/engine'
 import type { StyleTokens } from '../styles/engine'
 import type { SurfaceId } from '../shared'
@@ -119,19 +119,28 @@ export function installStyles(options: StyleOptions): StyleHandle {
 	if (runtime && typeof runtime.jsx === 'function') {
 		const originalJsx = runtime.jsx
 		const originalJsxs = runtime.jsxs
-		runtime.jsx = makeHook(originalJsx)
-		runtime.jsxs = typeof originalJsxs === 'function' ? makeHook(originalJsxs) : originalJsxs
-		disposers.push(() => {
-			runtime.jsx = originalJsx
-			runtime.jsxs = originalJsxs
-		})
+		try {
+			runtime.jsx = makeHook(originalJsx)
+			runtime.jsxs =
+				typeof originalJsxs === 'function' ? makeHook(originalJsxs) : originalJsxs
+			disposers.push(() => {
+				try {
+					runtime.jsx = originalJsx
+					runtime.jsxs = originalJsxs
+				} catch {}
+			})
+		} catch (error) {
+			// A read-only JSX module (or a frozen proxy) must not fail the install.
+			options.logger.warn(`[perf] could not wrap the JSX runtime: ${String(error)}`)
+		}
 	} else {
 		options.logger.warn('[perf] JSX runtime not found; styles will use createElement only')
 	}
 
 	// Fallback (and the only path on older builds): React.createElement.
 	try {
-		const React = api().metro.common.React as any
+		const host = apiOrNull() as any
+		const React = (host?.react?.React ?? host?.metro?.common?.React) as any
 		if (React?.createElement && !runtime) {
 			const original = React.createElement
 			React.createElement = function patched(type: any, props: any, ...rest: any[]) {

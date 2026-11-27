@@ -12,32 +12,51 @@ cards, or a palette of your own.
 
 ## Install
 
-Revenge ships two plugin runtimes, and the install steps differ. Not sure which
-you have? If your Plugins screen has an **Install a plugin** button you are on the
-stable client (what Revenge Manager installs); if it has **Add repository** you
-are on Revenge Next. See [docs/runtime-support.md](docs/runtime-support.md).
+Revenge and Valenced ship different plugin runtimes, and the install steps
+differ. Not sure which you have? Valenced shows **Settings → Valenced →
+Plugins**; Revenge shows **Settings → Revenge → Plugins** (with an **Install a
+plugin** button on the stable client, a **Browse plugins** screen on Revenge
+Next). See [docs/runtime-support.md](docs/runtime-support.md) for the full
+matrix.
 
-### Stable clients (Revenge Manager, RevengeXposed) — most users
+### Valenced
+
+1. **Settings → Valenced → Plugins → Add repository** (top of the screen).
+2. Paste the repository index URL:
+
+   ```
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/valenced/index.json
+   ```
+
+3. Install **Performance Enhancer** from the browse list.
+
+No repository? Sideload the **Valenced ZIP** (`…-valenced.zip`) attached to the
+[latest release](https://github.com/Johndoehackie123/Performance-Enhancer/releases):
+**Settings → Valenced → Plugins → Install plugin from file** and pick it.
+
+The Valenced build declares the mandatory `valenced.api` + `discord`
+dependencies its loader requires; the ZIP is verified against the SHA-256 in
+the repository index.
+
+### Stable clients (Revenge Manager, RevengeXposed) — most Revenge users
 
 1. Open Discord with Revenge installed.
 2. Go to **Settings → Revenge → Plugins** and tap **Install a plugin**.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.1.0.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.0.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
 
 The same ZIP is attached to the
-[latest release](https://github.com/Johndoehackie123/Performance-Enhancer/releases);
-sideload it by extracting it into `Revenge/plugins/johndoehackie123.performance-enhancer/`
-on your device, or install it with *Install from file* where that option exists.
+[latest release](https://github.com/Johndoehackie123/Performance-Enhancer/releases).
 
 ### Revenge Next
 
 1. **Settings → Revenge → Plugins** → gear icon next to *Plugins*.
-2. Add the repository URL:
+2. Add the repository URL (the branch root — the client appends `index.json`):
 
    ```
    https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages
@@ -131,8 +150,10 @@ Heap usage, cache trims, bytes released, gateway bursts, dispatch counts
 bun install            # required: see the note below
 bun run lint:types     # type-check
 bun run build          # bundle JS into plugins/*/build/js/index.js
-bun run package        # bundle + write build/dist/<id>@<version>.zip
-bun run index -- --dist build/dist --base-url https://example.com/pool --out index.json
+bun run package        # bundle + write build/dist/{revenge,valenced}/<id>@<version>.zip
+bun run index -- --dist build/dist/revenge --base-url https://example.com/pool --out index.json
+node scripts/valenced-index.mjs --dist build/dist/valenced --base-url https://example.com/valenced --out valenced/index.json
+node scripts/verify-stable.mjs   # loads both artifacts the way each client does
 ```
 
 Requires bun 1.2+ (or Node 22.18+ for the scripts, with `npx tsc` for types).
@@ -156,13 +177,19 @@ Then open the URL printed by the CLI in **Settings → Revenge → Plugins**.
 
 ### Releasing
 
-Bump `version` in `plugins/performance-enhancer/manifest.json`, merge to `main`,
-and the *Release plugin* workflow:
+Bump `version` in `plugins/performance-enhancer/manifest.json` **and**
+`plugins/performance-enhancer/manifest.valenced.json`, merge to `main`, and the
+*Release plugin* workflow:
 
-1. type-checks, builds and packages the plugin;
-2. plans releases by comparing manifests against the `gh-pages` pool;
-3. copies new artifacts into `pool/` and regenerates `index.json`;
-4. commits both to `gh-pages` and creates a tagged GitHub release with the ZIP.
+1. type-checks, builds and packages one ZIP per client (`build/dist/revenge/`
+   and `build/dist/valenced/`);
+2. verifies each artifact the way its client loads it;
+3. plans releases by comparing manifests against the `gh-pages` pool and the
+   `gh-pages` `valenced/` directory;
+4. copies new artifacts into the pool, regenerates both `index.json`
+   (`/index.json` for Revenge Next, `/valenced/index.json` for Valenced);
+5. commits everything to `gh-pages` and creates a tagged GitHub release with
+   both ZIPs attached.
 
 Re-running is always safe: a version is released only once, and the planner
 refuses downgrades.

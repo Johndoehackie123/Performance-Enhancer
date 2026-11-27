@@ -1,0 +1,20 @@
+{
+	"format": 1,
+	"id": "johndoehackie123.performance-enhancer",
+	"name": "Performance Enhancer",
+	"description": "RAM and SoC aware performance, memory and stability tuning, plus Material, Glassmorphism, Liquid Frost and custom visual styles.",
+	"author": "Johndoehackie123",
+	"icon": "SparklesIcon",
+	"version": "1.2.0",
+	"dependencies": {
+		"valenced.api": {
+			"version": ">=1 <2"
+		},
+		"discord": {
+			"version": "*"
+		}
+	},
+	"dist": {
+		"script": "index.js"
+	}
+}

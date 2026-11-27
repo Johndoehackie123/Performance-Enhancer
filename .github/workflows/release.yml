@@ -49,10 +49,10 @@ jobs:
       - name: Build and package
         run: bun run package
 
-      - name: Verify the artifact loads on both Revenge runtimes
-        # Revenge Manager ships the stable runtime, whose plugin contract differs
-        # from the Next repository format. This fails the build if the packaged
-        # bundle stops loading there, instead of shipping another 1.0.x.
+      - name: Verify the artifacts load on every client
+        # Revenge Manager ships the stable runtime, Next loads repositories, and
+        # Valenced validates the manifest before anything else runs. This fails
+        # the build if either artifact stops loading, instead of shipping junk.
         run: node scripts/verify-stable.mjs
 
       - name: Check out the published pool
@@ -70,14 +70,22 @@ jobs:
             git -C "${POOL_DIR}" rm -rf --cached . >/dev/null 2>&1 || true
             rm -rf "${POOL_DIR:?}"/* 2>/dev/null || true
           fi
-          mkdir -p "${POOL_DIR}/pool"
+          mkdir -p "${POOL_DIR}/pool" "${POOL_DIR}/valenced"
 
       - name: Plan releases
         id: plan
         env:
           POOL_DIR: published
           RUNNER_TEMP: ${{ runner.temp }}
-        run: node scripts/plan.mjs --pool "${POOL_DIR}/pool" --out "${RUNNER_TEMP}/plan.json"
+        run: |
+          # Each client has its own artifact directory (the manifests differ),
+          # so plan each independently; the combined count drives the rest.
+          mkdir -p published/valenced
+          env -u GITHUB_OUTPUT node scripts/plan.mjs --pool "${POOL_DIR}/pool" --dist build/dist/revenge --out "${RUNNER_TEMP}/plan.json"
+          env -u GITHUB_OUTPUT node scripts/plan.mjs --pool "${POOL_DIR}/valenced" --dist build/dist/valenced --out "${RUNNER_TEMP}/plan-valenced.json"
+          REVENGE=$(node -e "console.log(JSON.parse(require('fs').readFileSync('${RUNNER_TEMP}/plan.json','utf8')).length)")
+          VALENCED=$(node -e "console.log(JSON.parse(require('fs').readFileSync('${RUNNER_TEMP}/plan-valenced.json','utf8')).length)")
+          echo "count=$((REVENGE + VALENCED))" >> "$GITHUB_OUTPUT"
 
       - name: Publish artifacts to the pool
         if: steps.plan.outputs.count != '0'
@@ -85,7 +93,9 @@ jobs:
           POOL_DIR: published
           PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
           RUNNER_TEMP: ${{ runner.temp }}
-        run: node scripts/publish.mjs --plan "${RUNNER_TEMP}/plan.json" --pool "${POOL_DIR}/pool"
+        run: |
+          node scripts/publish.mjs --plan "${RUNNER_TEMP}/plan.json" --pool "${POOL_DIR}/pool"
+          node scripts/publish.mjs --plan "${RUNNER_TEMP}/plan-valenced.json" --pool "${POOL_DIR}/valenced"
 
       - name: Regenerate index.json
         if: steps.plan.outputs.count != '0'
@@ -101,6 +111,7 @@ jobs:
           BASE="${BASE%/}"
           echo "Serving the pool from ${BASE}/pool"
           bun run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"
+          node scripts/valenced-index.mjs --dist "${POOL_DIR}/valenced" --base-url "${BASE}/valenced" --out "${POOL_DIR}/valenced/index.json"
 
       - name: Commit the pool
         if: steps.plan.outputs.count != '0'
@@ -111,7 +122,7 @@ jobs:
           cd "${POOL_DIR}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pool index.json
+          git add pool index.json valenced
           if git diff --cached --quiet; then
             echo "Pool already holds this plan."
             exit 0
@@ -126,7 +137,7 @@ jobs:
           POOL_DIR: published
           GITHUB_REPOSITORY: ${{ github.repository }}
           RUNNER_TEMP: ${{ runner.temp }}
-        run: node scripts/tag.mjs --plan "${RUNNER_TEMP}/plan.json"
+        run: node scripts/tag.mjs --plan "${RUNNER_TEMP}/plan.json" --attach-dir build/dist/valenced
 
       - name: Clean up
         if: always()

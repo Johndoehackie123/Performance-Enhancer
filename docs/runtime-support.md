@@ -1,63 +1,110 @@
 # Runtime support
 
-Revenge currently ships **two different plugin runtimes**. A plugin only loads if
-it matches the one on the user's device, and they are not compatible.
+The plugin ships **one JS bundle** that runs on all of the currently supported
+Android clients, and **one ZIP per client** because the clients disagree on the
+manifest contract. Version 1.2.0 is the first release that works on **Valenced**.
 
-| | Stable (Revenge Manager, RevengeXposed) | Next (`revenge-bundle-next`) |
+| | Stable (Revenge Manager, RevengeXposed) | Next (`revenge-bundle-next`) | Valenced (`valenced`) |
+| --- | --- | --- | --- |
+| Install UI | Settings → Revenge → Plugins → **Install a plugin** (URL) | Settings → Revenge → Plugins → gear → **Add repository** | Settings → Valenced → Plugins → **Add repository**, or **Install plugin from file** |
+| Distribution | a URL serving `manifest.json` + the JS file | a repository serving `index.json` + ZIPs | a repository serving `index.json` + ZIPs, or a sideloaded ZIP |
+| Repository URL | n/a | the branch root — the client appends `index.json` | the verbatim `index.json` URL |
+| Plugin file | one IIFE exposing `plugin` | one expression returning the options (or a namespace with `.default`) | same as Next |
+| Loader expression | `(bunny, definePlugin) => { <src>; return plugin?.default ?? plugin }` | `new Function('revenge', 'plugin', 'return ' + src)` | `new Function('valenced', 'plugin', 'return ' + src)` |
+| API object | `window.vendetta` / the loader's `bunny` parameter | the `revenge.*` globals | the `valenced.*` globals |
+| Settings storage | `plugin.storage` (loader-persisted) | `plugin({ jsonStorage })` | `plugin({ jsonStorage })` |
+| Lifecycle | `onLoad` / `start` / `onUnload` | `init` / `start` / `stop` | `init` / `start` / `stop` |
+| Settings screen | `SettingsComponent`, no props | `SettingsComponent({ api })` | `SettingsComponent({ api })` |
+| Mandatory dependencies | `revenge.api` + `discord` (Revenge rejects otherwise) | `revenge.api` + `discord` | `valenced.api` + `discord` (Valenced rejects otherwise) |
+| Plugin API version | `1.2.1` (Revenge Manager / RevengeXposed) | stamped with the bundle | `1.1.0` → declared as `>=1 <2` |
+
+## Why Valenced rejected 1.1.0
+
+Two independent bugs, both invisible on Revenge:
+
+1. **The manifest declared the wrong API.** Valenced's `stagePluginZip` runs its
+   manifest validator before anything is extracted, and the validator requires
+   `valenced.api` **and** `discord` as non-optional dependencies
+   (`MANIFEST_INVALID … does not declare the mandatory 'valenced.api' dependency`).
+   A `revenge.api`-only manifest is therefore uninstallable on Valenced no matter
+   how valid the JS is.
+2. **The bundle was a statement sequence, not an expression.** Both modern
+   loaders evaluate the source as `return <source>`. The 1.1.0 bundle starts with
+   a `function __peHost() {…}` declaration, so the returned value was that
+   function instead of the plugin options. Valenced would have rejected the
+   options (`SettingsComponent must be a function React component`) even with a
+   valid manifest.
+
+Neither bug could be reported by Revenge: its stable loader evaluates the source
+as statements and reads `plugin` from the global scope, which the bundle set as
+a side effect.
+
+One manifest cannot serve both modern clients: Revenge's reserved dependency set
+is `revenge.api` + `discord`, Valenced's is `valenced.api` + `discord`, and in
+both clients a plugin whose mandatory dependency is absent is dropped from the
+dependency graph (`DEPENDENCY_MISSING`) — and a mandatory dependency cannot be
+`optional`. The packager therefore builds **two ZIPs from the same JS**:
+
+| ZIP | Manifest | Published to |
 | --- | --- | --- |
-| Bundle version | `revenge-bundle` v1.x (currently 1.12.1) | 0.1.x |
-| Install UI | Settings → Revenge → Plugins → **Install a plugin** (URL) | Settings → Revenge → Plugins → gear → **Add repository** |
-| Distribution | a URL serving `manifest.json` + the JS file | a repository serving `index.json` + ZIPs |
-| Plugin file | one IIFE exposing `plugin` | one IIFE exposing `plugin` (options object) |
-| API object | `window.vendetta` / the loader's first parameter | the `revenge.*` globals |
-| Settings storage | `plugin.storage` (auto-persisted) | `plugin({ jsonStorage })` |
-| Settings screen | `SettingsComponent` rendered with **no props** | `SettingsComponent({ api })` |
-| Plugin API version | `1.2.1` (from `gradle/libs.versions.toml`) | stamped with the bundle version |
+| `build/dist/revenge/<id>@<version>.zip` | `revenge.api >=1.2.1 <2` + `discord` (+ optional `revenge.api.themes`) | `pool/` → `gh-pages/index.json` (Revenge Next), or directly for stable sideload |
+| `build/dist/valenced/<id>@<version>.zip` | `valenced.api >=1 <2` + `discord` | `valenced/` → `gh-pages/valenced/index.json` (Valenced), also attached to releases as `…-valenced.zip` |
 
-## Why 1.0.0 and 1.0.1 could not install
+Both `index.json` documents are the same format (format 1), and both are
+generated from the artifacts on `gh-pages` — see `scripts/valenced-index.mjs`
+for the Valenced one (the official CLI hard-codes the Revenge reserved
+dependency IDs). Valenced aborts the install when an index's `dependencies` do
+not match the artifact's manifest, so the generator copies them verbatim.
 
-Both releases were built only for **Next**. That build has three properties that
-break it on the stable runtime:
+## The JS bundle
 
-1. **It references `revenge.*` at module scope.** The stable runtime has no
-   `revenge` global, so the source throws while it is still being defined. The
-   loader's `return plugin?.default ?? plugin` never runs, and the user sees an
-   install failure or an immediately-disabled plugin.
-2. **It wraps options in `plugin({...})`.** That helper is Next-only. On stable,
-   calling it throws `plugin is not defined`.
-3. **It declares `dist.script`,** which stable's sideload validator ignores (it
-   reads the manifest and then always loads `index.js`), and requires
-   `revenge.api >=1.2.1 <2` — satisfiable on Next, harmless but meaningless on
-   stable.
+`plugins/performance-enhancer/js/vendetta/` compiles into the one `index.js`
+that ships in both ZIPs. It satisfies all three loaders:
 
-The repository index itself was never the problem: `index.json` was valid, its
-SHA-256 matched the artifact, and the manifest passed every structural check.
-Adding the repository worked; installing from it could not.
+- The whole source is a **single assignment expression**
+  (`globalThis.plugin = (function () { … })()`). The stable loader reads the
+  `plugin` global after the statements run; the modern loaders return the
+  expression's value, whose `.default` is the options object.
+- React, React Native and the JSX runtime resolve at call time from the host:
+  `host.react.React` / `host.react.ReactJSXRuntime` on Next and Valenced,
+  `host.metro.common.*` (and `host._jsx`) on stable.
+- The API tree is probed, not assumed: `host.modules.finders.lookupModule` +
+  `filters.withProps` (modern) or `host.metro.findByProps` (stable) for module
+  lookup; `host.discord.flux.onFluxEventDispatched` (modern) or the stable Flux
+  dispatcher for telemetry blocking; `host.discord.actions.ToastActionCreators`
+  (modern) or `host.ui.toasts.showToast` (stable) for toasts.
+- Lifecycle is dual-shaped: `onLoad`/`onUnload` for stable, `init`/`start`/`stop`
+  for Next and Valenced. `start` is shared; the modern runtimes register their
+  cleanups through the lifecycle API's `cleanup(...)`, and the stable runtime
+  through `onUnload`.
+- Settings persist through the loader on stable (`plugin.storage`) and through
+  `jsonStorage` on Next and Valenced, wired up in `init` from the store the
+  client creates for plugins that declare `jsonStorage` in their options.
 
-## How this repository supports both
-
-`plugins/performance-enhancer/js/` holds the Next implementation. The new
-`js/vendetta/` directory holds the stable implementation, and
-`scripts/build-vendetta.mjs` compiles it into **the same `index.js`** the ZIP
-ships, so one artifact works on both clients:
-
-- the bundle reads React from the loader's `bunny` parameter, never from a global;
-- host capabilities are probed, not assumed — a missing `FluxDispatcher` or
-  `TableRadioGroup` degrades one control instead of throwing;
-- the source is a single expression (`globalThis.plugin = …`) so it satisfies
-  both loaders' evaluation strategies.
-
-`scripts/verify-stable.mjs` reproduces both loaders and fails the build if the
-packaged artifact stops loading on either. It runs in CI right after packaging.
+`scripts/verify-stable.mjs` reproduces all three loaders against a mock host
+per client and fails the build if either artifact stops loading. It runs in CI
+right after packaging, and it re-checks the manifest for each client
+(mandatory, non-optional reserved dependencies) so a 1.1.0-style release cannot
+ship again.
 
 ## Installing
 
-**Stable clients** (this is what the release notes point at):
+**Valenced**
+
+1. Settings → Valenced → Plugins → **Add repository**
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/valenced/index.json`
+3. Install **Performance Enhancer** from the browse list — or sideload the
+   `…-valenced.zip` from the [latest release](https://github.com/Johndoehackie123/Performance-Enhancer/releases)
+   with **Install plugin from file**.
+
+**Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste the ZIP URL:
-   `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.1.0.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.0.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
-**Next clients:** add `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages`
-as a repository, then install from Browse Plugins.
+**Next clients**
+
+1. Settings → Revenge → Plugins → gear icon → **Add repository**
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages` (the client appends `index.json`)
+3. Install from **Browse plugins**.
