@@ -41,6 +41,7 @@ jobs:
         run: |
           git fetch origin "${POOL_BRANCH}"
           git worktree add --detach "${POOL_DIR}" "origin/${POOL_BRANCH}"
+          mkdir -p "${POOL_DIR}/pool" "${POOL_DIR}/valenced"
 
       - name: Regenerate index.json
         env:
@@ -52,6 +53,7 @@ jobs:
           BASE="${BASE%/}"
           echo "Serving the pool from ${BASE}/pool"
           bun run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"
+          node scripts/valenced-index.mjs --dist "${POOL_DIR}/valenced" --base-url "${BASE}/valenced" --out "${POOL_DIR}/valenced/index.json"
 
       - name: Commit the index
         env:
@@ -61,7 +63,7 @@ jobs:
           cd "${POOL_DIR}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.json
+          git add index.json valenced
           if git diff --cached --quiet; then
             echo "index.json is up to date."
             exit 0

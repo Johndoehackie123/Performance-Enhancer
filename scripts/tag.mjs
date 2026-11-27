@@ -9,16 +9,51 @@
  * idempotent.
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 
 const { values } = parseArgs({
 	args: process.argv.slice(2),
-	options: { plan: { type: 'string', default: 'releases.json' } },
+	options: {
+		plan: { type: 'string', default: 'releases.json' },
+		/** Extra directory whose ZIPs are attached to every created release. */
+		'attach-dir': { type: 'string' },
+	},
 })
 
 const plan = JSON.parse(readFileSync(values.plan, 'utf8'))
 const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+
+// Additional artifacts attached to every release (e.g. the Valenced build).
+// Release asset names must be unique, so a Valenced ZIP colliding with the
+// Revenge artifact is staged under a `-valenced` suffix.
+function dedupeAssets(paths, existing) {
+	const out = []
+	const used = new Set(existing.map(path => path.split('/').pop()))
+	const staging = mkdtempSync(join(tmpdir(), 'pe-assets-'))
+	for (const path of paths) {
+		const base = path.split('/').pop()
+		if (used.has(base)) {
+			const renamed = base.replace(/\.zip$/, '-valenced.zip')
+			const dest = join(staging, renamed)
+			copyFileSync(path, dest)
+			used.add(renamed)
+			out.push(dest)
+		} else {
+			used.add(base)
+			out.push(path)
+		}
+	}
+	return out
+}
+
+const extraAssetPaths = values['attach-dir']
+	? readdirSync(values['attach-dir'])
+			.filter(name => name.endsWith('.zip'))
+			.map(name => join(values['attach-dir'], name))
+	: []
 
 function hasGh() {
 	try {
@@ -29,14 +64,29 @@ function hasGh() {
 	}
 }
 
+const PAGES = 'https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages'
+
 function notes(item) {
+	const file = item.file ?? `${item.id}@${item.version}.zip`
 	return [
 		`## ${item.name} ${item.version}`,
 		'',
-		'### Install in Revenge',
-		'Settings > Revenge > Plugins, add this repository, then install **' + item.name + '**.',
+		'### Revenge stable (Revenge Manager / RevengeXposed)',
+		'Settings > Revenge > Plugins > Install a plugin, then paste:',
 		'',
-		'Or sideload the attached ZIP: Settings > Revenge > Plugins > gear icon > Install from file.',
+		`${PAGES}/pool/${file}`,
+		'',
+		'### Revenge Next',
+		'Settings > Revenge > Plugins > gear icon next to Plugins > Add repository:',
+		'',
+		`${PAGES}/index.json`,
+		'',
+		'### Valenced',
+		'Settings > Valenced > Plugins > Add repository:',
+		'',
+		`${PAGES}/valenced/index.json`,
+		'',
+		'Or sideload the Valenced ZIP attached to this release (\'...-valenced.zip\'): Settings > Valenced > Plugins > Install plugin from file.',
 	].join('\n')
 }
 
@@ -50,13 +100,17 @@ for (const item of plan) {
 			continue
 		} catch {}
 
+		const assets = [
+			item.zip,
+			...dedupeAssets(extraAssetPaths, [item.zip]),
+		].filter(path => existsSync(path))
 		execFileSync(
 			'gh',
 			[
 				'release',
 				'create',
 				item.tag,
-				item.zip,
+				...assets,
 				'--title',
 				`${item.name} ${item.version}`,
 				'--notes',
@@ -97,18 +151,25 @@ for (const item of plan) {
 	if (!created.ok) throw new Error(`Could not create ${item.tag}: ${created.status}`)
 	const release = await created.json()
 
-	const zip = readFileSync(item.zip)
-	const upload = await fetch(
-		`https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(item.file)}`,
-		{
-			method: 'POST',
-			headers: {
-				authorization: `Bearer ${token}`,
-				'content-type': 'application/zip',
+	const assets = [
+		item.zip,
+		...dedupeAssets(extraAssetPaths, [item.zip]),
+	].filter(path => existsSync(path))
+	for (const path of assets) {
+		const fileName = path.split('/').pop()
+		const zip = readFileSync(path)
+		const upload = await fetch(
+			`https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(fileName)}`,
+			{
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${token}`,
+					'content-type': 'application/zip',
+				},
+				body: zip,
 			},
-			body: zip,
-		},
-	)
-	if (!upload.ok) throw new Error(`Could not upload ${item.file}: ${upload.status}`)
+		)
+		if (!upload.ok) throw new Error(`Could not upload ${fileName}: ${upload.status}`)
+	}
 	console.log(`✓ ${item.tag}`)
 }

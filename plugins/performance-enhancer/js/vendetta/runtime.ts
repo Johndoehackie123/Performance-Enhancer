@@ -151,7 +151,7 @@ export function installRuntime(options: RuntimeOptions): RuntimeHandle & { trims
 	// --- trim when the app leaves the foreground ---------------------------
 	try {
 		const { AppState } = reactNative()
-		const subscription = AppState.addEventListener('change', next => {
+		const subscription = AppState?.addEventListener?.('change', (next: string) => {
 			if (next === 'background' || next === 'inactive') trim()
 		})
 		disposers.push(() => {

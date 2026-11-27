@@ -23,6 +23,7 @@ import { definePlugin } from './define'
 import { detectDevice } from './device'
 import { installRuntime } from './runtime'
 import {
+	attachModernStorage,
 	attachStorage,
 	attachStorageFromLoader,
 	getDiagnostics,
@@ -56,7 +57,14 @@ const hooks: Hooks = {
  * still resolves the API when Revenge renders it much later.
  */
 try {
-	const fromLoader = typeof bunny !== 'undefined' ? bunny : (globalThis as any).vendetta
+	// bunny (stable parameter), then stable's global, then the modern globals.
+	const fromLoader =
+		typeof bunny !== 'undefined'
+			? bunny
+			: ((globalThis as any).bunny ??
+				(globalThis as any).vendetta ??
+				(globalThis as any).valenced ??
+				(globalThis as any).revenge)
 	bindApi(fromLoader)
 } catch {}
 
@@ -71,6 +79,12 @@ const options = definePlugin({
 	settings: DEFAULT_SETTINGS,
 
 	/**
+	 * Modern runtimes (Revenge Next / Valenced) opt into the same defaults
+	 * through the jsonStorage decoration instead of `settings`.
+	 */
+	jsonStorage: { load: true, default: DEFAULT_SETTINGS as unknown as Record<string, any> },
+
+	/**
 	 * First lifecycle call. Discord's modules are resolvable here, but nothing is
 	 * hooked yet: a plugin that fails during `onLoad` can still be uninstalled
 	 * cleanly.
@@ -78,7 +92,8 @@ const options = definePlugin({
 	onLoad(this: { id?: string; storage?: PluginStorage }) {
 		// The API is the object the loader passed in; capturing it here means the
 		// settings screen works even though it renders much later.
-		const loaderApi = apiOrNull() ?? (globalThis as any).vendetta
+		const g = globalThis as any
+		const loaderApi = apiOrNull() ?? g.vendetta ?? g.valenced ?? g.revenge ?? g.bunny
 		bindApi(loaderApi)
 
 		attachStorage(this?.storage as PluginStorage | undefined)
@@ -88,14 +103,33 @@ const options = definePlugin({
 	},
 
 	/**
+	 * Modern runtimes call `init` (with the lifecycle API) instead of `onLoad`.
+	 * The settings are read from the jsonStorage document before `start` runs.
+	 */
+	async init(api?: Parameters<typeof attachModernStorage>[0]) {
+		const g = globalThis as any
+		bindApi(g.valenced ?? g.revenge ?? g.bunny ?? g.vendetta)
+		await attachModernStorage(api as any)
+		patchDiagnostics({ heapUsedMb: readHeap() })
+		logOnce()
+	},
+
+	/**
 	 * Called when the plugin is enabled, installed, or booted while enabled.
 	 * Everything registered here is released in `onUnload`.
 	 */
-	start(this: { storage?: PluginStorage }) {
-		const loaderApi = apiOrNull() ?? (globalThis as any).vendetta
+	start(
+		this: { storage?: PluginStorage },
+		modernApi?: { cleanup?: (...fns: (() => void)[]) => void },
+	) {
+		const g = globalThis as any
+		const loaderApi = apiOrNull() ?? g.valenced ?? g.revenge ?? g.vendetta
 		bindApi(loaderApi)
 		attachStorage(this?.storage as PluginStorage | undefined)
 		attachStorageFromLoader()
+		// Modern runtimes expect cleanups through the lifecycle API; releasing
+		// here is idempotent, so `stop` can call it again.
+		modernApi?.cleanup?.(() => release())
 
 		const runtimeOptions: RuntimeOptions = {
 			getTrimLimitMb: () => getSettings().memory.imageCacheLimitMb,
@@ -162,8 +196,13 @@ const options = definePlugin({
 		}
 	},
 
-	/** Called when the plugin is disabled, reloaded or uninstalled. */
+	/** Called when the plugin is disabled, reloaded or uninstalled (stable). */
 	onUnload() {
+		release()
+	},
+
+	/** Same teardown for the modern runtimes' `stop` lifecycle. */
+	stop() {
 		release()
 	},
 

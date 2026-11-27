@@ -63,6 +63,39 @@ export function attachStorageFromLoader() {
 	if (fromLoader) attachStorage(fromLoader)
 }
 
+interface ModernJsonStorage {
+	cache?: Record<string, any>
+	get?(): Promise<any>
+	set?(value: any, replace?: boolean): Promise<any>
+}
+
+/**
+ * Wires the JSON storage the modern runtimes (Revenge Next / Valenced) create
+ * for plugins that declare `jsonStorage` in their options.
+ *
+ * The store is read asynchronously, so this is async: `init` awaits it, which is
+ * what makes the settings complete by the time `start` runs. The adapter
+ * satisfies the same `PluginStorage` interface as stable Revenge's loader
+ * storage, so the rest of the plugin never has to know which client it runs on.
+ */
+export async function attachModernStorage(api: { jsonStorage?: ModernJsonStorage } | undefined) {
+	const store = api?.jsonStorage
+	if (!store) return
+	try {
+		if (typeof store.get === 'function') await store.get()
+	} catch {}
+	const cache = store.cache && typeof store.cache === 'object' ? store.cache : undefined
+	attachStorage({
+		cache: cache ?? {},
+		set(value: Record<string, any>) {
+			try {
+				void Promise.resolve(store.set?.(value, true)).catch(() => {})
+			} catch {}
+		},
+		refresh() {},
+	})
+}
+
 export function getSettings(): Settings {
 	if (!current) current = build(storage?.cache)
 	return current

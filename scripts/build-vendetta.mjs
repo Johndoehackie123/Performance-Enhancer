@@ -1,31 +1,31 @@
 #!/usr/bin/env node
 /**
- * Builds the stable-Revenge (Vendetta-format) bundle.
+ * Builds the plugin bundle that ships in the plugin ZIP.
  *
  *   node scripts/build-vendetta.mjs [--dev]
  *
  * Output: plugins/performance-enhancer/build/js/index.js
  *
- * Why a second build exists
- * -------------------------
- * Revenge ships two plugin runtimes:
+ * One artifact serves every client that can load the plugin:
  *
- *   - **Stable** (Revenge Manager / RevengeXposed, bundle v1.x) evaluates a
- *     plugin as `(bunny, definePlugin) => { <code>; return plugin?.default ?? plugin; }`
- *     and exposes `window.vendetta`. It has no `revenge.*` globals, no
- *     `plugin()` helper and no repository index — plugins are installed from a
- *     URL that serves `manifest.json` + the JS file.
- *   - **Next** loads `index.json` repositories, exposes the `revenge.*` globals,
- *     and provides the `plugin()` helper with `jsonStorage`.
+ *   - **Revenge stable** (Revenge Manager / RevengeXposed) evaluates the source
+ *     as `(bunny, definePlugin) => { <code>; return plugin?.default ?? plugin; }`
+ *     and reads the `plugin` global afterwards.
+ *   - **Revenge Next** evaluates it as
+ *     `new Function('revenge', 'plugin', 'return ' + src)(revengeApi, opts => opts)?.default`.
+ *   - **Valenced** evaluates it the same way with `valenced` as the first
+ *     parameter and `globalThis.valenced` as the injected API.
  *
- * The Next bundle references `revenge.react.*` at module scope, so on the stable
- * runtime it throws while the source is still being defined and the loader never
- * reaches `return plugin`. That is why the plugin could be added as a repository
- * but never installed.
+ * For the `return <src>` contract the whole source must be ONE expression whose
+ * value is the plugin options (or a namespace carrying `.default`). For the
+ * stable contract the source must additionally leave `globalThis.plugin` set.
+ * The emitted bundle is therefore a single assignment expression whose right
+ * side is an IIFE: the assignment sets the stable global, and the IIFE's value
+ * is what the modern loaders return.
  *
- * This build compiles the runtime-adaptive source in `js/vendetta/` against the
- * stable API, using the same Hermes target settings as the official CLI so both
- * bundles behave identically on device.
+ * React, React Native and the JSX runtime are resolved from the host at call
+ * time — `host.react.*` on the modern runtimes, `host.metro.common.*` on the
+ * stable one — so a single bundle works against both API trees.
  */
 import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -44,44 +44,25 @@ const { values } = parseArgs({
 })
 
 /**
- * Bare imports the stable runtime provides.
- *
- * `bunny` is the loader's own first parameter — `VdPluginManager` evaluates the
- * source as `(bunny, definePlugin) => …` — so the bundle must resolve React
- * through the loader API that is passed in, not through a global that does not
- * exist on this runtime. A second React would break hooks and context, and a
- * missing `vendetta` global would throw before `plugin` is ever defined.
- */
-/**
- * How each bare import resolves inside the bundle.
- *
- * `bunny` is the loader's own first parameter — `VdPluginManager` evaluates the
- * source as `(bunny, definePlugin) => …` — so the bundle reads React from the
- * host's copies instead of shipping a second React (which would break hooks and
- * context). When the source is evaluated somewhere without that binding, it
- * falls back to the loader object on `globalThis`, which the bundle seeds itself.
- */
-/**
  * Host accessor.
  *
- * `bunny` is the loader's own first parameter — `VdPluginManager` evaluates the
- * source as `(bunny, definePlugin) => …` — so the bundle reads React from the
- * host's copies rather than shipping a second React (that would break hooks and
- * context). Resolution is deferred to call time and tolerates a missing host, so
- * evaluating the source where no Revenge API exists yields the plugin object
- * instead of throwing before `plugin` is defined.
+ * `bunny` is the stable loader's own first parameter — the bundle resolves the
+ * host lazily so a missing API never throws at import time, and so the modern
+ * globals (`valenced` / `revenge`) installed by their pre-init plugin are seen.
  */
 const ACCESSOR = '__peHost'
 
+/**
+ * How each bare import resolves inside the bundle.
+ *
+ * The modern runtimes expose React under `host.react.*`; the stable runtime
+ * keeps it on `host.metro.common.*`. The stable runtime also re-exports the
+ * JSX runtime as `host._jsx`. The first hit wins on every client.
+ */
 const GLOBALS = {
-	react: `${ACCESSOR}().metro.common.React`,
-	'react-native': `${ACCESSOR}().metro.common.ReactNative`,
-	/**
-	 * Stable Revenge re-exports the JSX runtime as `bunny._jsx`
-	 * (`export * as _jsx from "react/jsx-runtime"` in `lib/index.ts`); some
-	 * builds also carry a copy under `metro.common`.
-	 */
-	'react/jsx-runtime': `(${ACCESSOR}()._jsx||${ACCESSOR}().metro.common.ReactJSXRuntime)`,
+	react: `(${ACCESSOR}().react?.React??${ACCESSOR}().metro?.common?.React)`,
+	'react-native': `(${ACCESSOR}().react?.ReactNative??${ACCESSOR}().metro?.common?.ReactNative)`,
+	'react/jsx-runtime': `(${ACCESSOR}().react?.ReactJSXRuntime??${ACCESSOR}().react?.jsxRuntime??${ACCESSOR}()._jsx??${ACCESSOR}().metro?.common?.ReactJSXRuntime)`,
 }
 
 const external = id => id in GLOBALS
@@ -130,20 +111,22 @@ const hermesPlugin = {
 	},
 }
 
+/**
+ * The accessor, declared inline inside the emission wrapper.
+ *
+ * Never *assigns* a stub to a global: the fallback is returned for this call
+ * only, so a loader that installs its API a moment later is never shadowed.
+ */
+const ACCESSOR_DECL =
+	`function ${ACCESSOR}(){` +
+	'var host=typeof bunny<"u"?bunny:(globalThis.bunny??globalThis.vendetta??globalThis.valenced??globalThis.revenge);' +
+	'return host??{metro:{common:{}}};}'
+
 async function main() {
 	if (!existsSync(ENTRY)) {
 		console.error(`Missing entry: ${ENTRY}`)
 		process.exit(1)
 	}
-
-	const BUNDLE_BANNER =
-		`function ${ACCESSOR}(){` +
-		// Never *assign* a stub: that would shadow a loader object that is set a
-		// moment later, and the plugin would never see the real API. The fallback
-		// is returned for this call only.
-		'var host=typeof bunny<"u"?bunny:(globalThis.bunny??globalThis.vendetta);' +
-		'return host||{metro:{common:{}}};}' +
-		'\n'
 
 	const bundle = await rolldown({
 		input: ENTRY,
@@ -159,13 +142,10 @@ async function main() {
 	})
 
 	const { output } = await bundle.generate({
-		// `es` output is wrapped by hand so the loader's `bunny` parameter can be
-		// threaded in without relying on a global, and so the final `return` is
-		// reachable from the evaluator's function body.
+		// `es` output is wrapped by hand so the loader's own parameters can be
+		// threaded in without relying on a global that may not exist yet.
 		format: 'iife',
 		name: 'performanceEnhancer',
-		// Resolved from the loader's own parameter, so no global lookup is needed
-		// and a second React is never bundled.
 		globals: id => GLOBALS[id],
 		exports: 'named',
 		esModule: false,
@@ -178,40 +158,34 @@ async function main() {
 	const chunk = output[0]
 	if (!chunk) throw new Error('Bundler produced no output')
 
-	/**
-	 * One expression has to satisfy both loaders:
-	 *
-	 *   stable: `(bunny,definePlugin)=>{ <src>; return plugin?.default ?? plugin; }`
-	 *           — needs a `plugin` binding after the source runs.
-	 *   next:   `new Function('revenge','plugin','return ' + src)` — needs the
-	 *           source to be a single expression that *evaluates to* the options.
-	 *
-	 * Assigning the module namespace to `plugin` satisfies both: it is an
-	 * assignment expression (so `return` can take it) and it leaves the global
-	 * the stable runtime reads. Both loaders then pick `.default`, which is the
-	 * options object.
-	 */
-	const expression = chunk.code.replace(/^var [A-Za-z_$][\w$]*\s*=\s*/, 'globalThis.plugin=')
-	if (!expression.startsWith('globalThis.plugin=')) {
-		throw new Error('Unexpected bundle shape: could not expose the plugin as an expression')
+	const rhs = chunk.code.replace(/^var [A-Za-z_$][\w$]*\s*=\s*/, '').replace(/;\s*$/, '')
+	if (rhs === chunk.code) {
+		throw new Error('Unexpected bundle shape: could not strip the leading binding')
 	}
 
 	/**
-	 * Helper + expression.
+	 * One expression satisfies every loader:
 	 *
-	 * The helper is a function declaration, so it does not break the fact that
-	 * the *last* statement is the assignment the loaders return / read.
+	 *   stable: `(bunny,definePlugin)=>{ <src>; return plugin?.default ?? plugin; }`
+	 *     — the assignment sets `globalThis.plugin` (the global is what `plugin`
+	 *       resolves to in the loader's body) before control returns.
+	 *   modern: `new Function('revenge'|'valenced', 'plugin', 'return ' + src)`
+	 *     — the whole source is a single assignment expression, whose value is
+	 *       the IIFE's value: the module namespace. `.default` is the options.
+	 *
+	 * The accessor is a function declaration inside the wrapper, so nothing
+	 * leaks into the loader's scope and no statement precedes the assignment.
 	 */
-	const code = `${BUNDLE_BANNER}${expression}`
+	const code = `globalThis.plugin=(function(){${ACCESSOR_DECL}\nreturn ${rhs}})();`
 
 	await mkdir(OUT_DIR, { recursive: true })
-	await writeFile(OUT_FILE, code.endsWith(';') ? code : `${code};`, 'utf8')
+	await writeFile(OUT_FILE, code, 'utf8')
 
-	const kb = (chunk.code.length / 1024).toFixed(1)
-	console.log(`✓ Built stable (Vendetta) bundle: ${OUT_FILE} (${kb} kB)`)
+	const size = Buffer.byteLength(code)
+	console.log(`✓ Built universal bundle: ${OUT_FILE} (${(size / 1024).toFixed(1)} kB)`)
 }
 
 main().catch(error => {
-	console.error('✗ Stable bundle build failed:', error)
+	console.error('✗ Bundle build failed:', error)
 	process.exit(1)
 })
