@@ -1,0 +1,57 @@
+# PR build validation: type-check, build every plugin, and prove the repository
+# index can be generated from the resulting artifacts.
+
+name: Validate
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - 'types/**'
+      - 'scripts/**'
+      - '.github/**'
+      - 'repo.config.json'
+      - 'package.json'
+      - 'tsconfig.base.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        # bun is used because @revenge-mod/plugin-cli is installed from git and
+        # its `prepare` script builds the CLI, which needs the workspace peer
+        # @revenge-mod/types to be linked first. npm runs that script in
+        # isolation and fails; bun links workspace packages first.
+        run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: bunx tsc -p plugins/performance-enhancer/tsconfig.json --noEmit
+
+      - name: Build and package plugins
+        run: bun run package
+
+      - name: Generate repository index
+        run: |
+          bun run index -- \
+            --dist build/dist \
+            --base-url https://revenge.local \
+            --out /tmp/index.json
+          cat /tmp/index.json
+
+      - name: Verify artifacts
+        run: node scripts/index.mjs scan --dist build/dist --out /tmp/pool.json && cat /tmp/pool.json
