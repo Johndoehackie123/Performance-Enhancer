@@ -325,6 +325,34 @@ function checkManifest(label, manifest, expectations) {
 
 /* ------------------------------------------------------------------- source */
 
+/**
+ * Globals the shipped bundle may never reference.
+ *
+ * Hermes (the JS engine in React Native / Discord) deliberately does not
+ * implement WHATWG APIs such as `structuredClone`, and is missing or lagging
+ * on some ES2022+ additions. Referencing any of these throws at runtime on
+ * device — exactly what shipped in 1.2.0 (`ReferenceError: Property
+ * 'structuredClone' doesn't exist`, facebook/hermes#684). The bundle is
+ * checked so this class of bug fails CI instead of the user's client.
+ */
+const BANNED_GLOBALS = [
+	'structuredClone',
+	'Object.hasOwn(',
+	'.at(',
+	'.replaceAll(',
+	'.findLast(',
+	'.findLastIndex(',
+	'.allSettled(',
+	'Object.groupBy',
+	'Map.groupBy',
+	'Promise.withResolvers',
+	'Array.fromAsync',
+	'FinalizationRegistry',
+	'WeakRef',
+	'btoa(',
+	'atob(',
+]
+
 function checkSource(label, source, manifest, sizeBytes) {
 	check(label, 'source is a single expression statement', /^globalThis\.plugin=/.test(source.trimStart()))
 	check(
@@ -338,6 +366,9 @@ function checkSource(label, source, manifest, sizeBytes) {
 		'no stray references to other clients\' loaders',
 		!/\brequire\(['"]revenge/.test(source) && !/\brequire\(['"]valenced/.test(source),
 	)
+	for (const token of BANNED_GLOBALS) {
+		check(label, `no reference to unsupported global \'${token}\'`, !source.includes(token))
+	}
 }
 
 /* ----------------------------------------------------------------- stable run */

@@ -2,7 +2,7 @@
 
 The plugin ships **one JS bundle** that runs on all of the currently supported
 Android clients, and **one ZIP per client** because the clients disagree on the
-manifest contract. Version 1.2.0 is the first release that works on **Valenced**.
+manifest contract. Version 1.2.1 is the first release that works on **Valenced** and on **Revenge** (1.2.0 installed on Valenced but crashed in `init`; see below).
 
 | | Stable (Revenge Manager, RevengeXposed) | Next (`revenge-bundle-next`) | Valenced (`valenced`) |
 | --- | --- | --- | --- |
@@ -38,6 +38,28 @@ Two independent bugs, both invisible on Revenge:
 Neither bug could be reported by Revenge: its stable loader evaluates the source
 as statements and reads `plugin` from the global scope, which the bundle set as
 a side effect.
+
+## Why 1.2.0 crashed on device after installing
+
+1.2.0 **installed** everywhere it could be installed, then died inside `init`
+(Revenge: inside `onLoad`) with:
+
+```
+[PLUGIN_ERROR] Property 'structuredClone' doesn't exist
+ReferenceError: Property 'structuredClone' doesn't exist
+```
+
+`structuredClone` is a WHATWG API, not ECMAScript, and Hermes — the JS engine
+in React Native and Discord — deliberately does not implement it
+([facebook/hermes#684](https://github.com/facebook/hermes/issues/684)).
+`withDefaults()` called `structuredClone(defaults)` while wiring the settings
+store, so the very first call into the plugin threw on every client.
+
+1.2.1 replaces `structuredClone` with a small recursive `deepClone` for plain
+JSON data and adds a check to `scripts/verify-stable.mjs` that rejects the
+bundle if it references any global the runtime demonstrably does not provide
+(`structuredClone`, `Object.hasOwn`, `Array.prototype.at`, `Promise.allSettled`,
+etc.). That check runs in CI on every build.
 
 One manifest cannot serve both modern clients: Revenge's reserved dependency set
 is `revenge.api` + `discord`, Valenced's is `valenced.api` + `discord`, and in
@@ -100,7 +122,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.0.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.1.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**

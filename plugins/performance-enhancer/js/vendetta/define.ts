@@ -14,6 +14,25 @@
  */
 
 /**
+ * Deep-clones plain data (objects, arrays, primitives).
+ *
+ * `structuredClone` is a WHATWG API, not ECMAScript — Hermes, the JS engine in
+ * React Native / Discord, deliberately does not implement it, so calling it
+ * throws `ReferenceError: Property 'structuredClone' doesn't exist` (see
+ * facebook/hermes#684). The plugin's settings are plain JSON, so a recursive
+ * copy here does everything we need without relying on a host global.
+ */
+export function deepClone<T>(value: T): T {
+	if (value === null || typeof value !== 'object') return value
+	if (Array.isArray(value)) return value.map(item => deepClone(item)) as unknown as T
+	const out: Record<string, any> = {}
+	for (const key of Object.keys(value as Record<string, any>)) {
+		out[key] = deepClone((value as Record<string, any>)[key])
+	}
+	return out as T
+}
+
+/**
  * Declares a plugin.
  *
  * Typed loosely on purpose: the stable runtime has no `jsonStorage` support, so
@@ -26,7 +45,7 @@ export function definePlugin<T extends Record<string, any>>(options: T): T {
 
 /** Deep-merges stored settings over the defaults, keeping stored values. */
 export function withDefaults<T>(defaults: T, stored: unknown): T {
-	if (!stored || typeof stored !== 'object') return structuredClone(defaults)
+	if (!stored || typeof stored !== 'object') return deepClone(defaults)
 	const merge = (base: any, value: any): any => {
 		if (Array.isArray(base) || typeof base !== 'object' || base === null) return value ?? base
 		if (!value || typeof value !== 'object') return base
@@ -38,5 +57,5 @@ export function withDefaults<T>(defaults: T, stored: unknown): T {
 		}
 		return out
 	}
-	return merge(structuredClone(defaults), stored) as T
+	return merge(deepClone(defaults), stored) as T
 }
