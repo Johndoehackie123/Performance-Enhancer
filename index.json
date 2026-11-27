@@ -13,8 +13,8 @@
       },
       "versions": {
         "1.0.0": {
-          "url": "https://johndoehackie123.github.io/Performance-Enhancer/pool/johndoehackie123.performance-enhancer@1.0.0.zip",
-          "sha256": "82b787c51166828fc112ff339d978408779ce5d49979079b0be2dace1647d74c",
+          "url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.0.0.zip",
+          "sha256": "5a2fbcdffc2385ec04abe9e1475f8e8ef235bb1e097bb446e12c6d504742bab0",
           "size": 11631,
           "dependencies": {
             "revenge.api": {
