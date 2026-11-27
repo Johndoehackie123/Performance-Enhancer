@@ -12,21 +12,38 @@ cards, or a palette of your own.
 
 ## Install
 
-**From the plugin repository (recommended):**
+Revenge ships two plugin runtimes, and the install steps differ. Not sure which
+you have? If your Plugins screen has an **Install a plugin** button you are on the
+stable client (what Revenge Manager installs); if it has **Add repository** you
+are on Revenge Next. See [docs/runtime-support.md](docs/runtime-support.md).
+
+### Stable clients (Revenge Manager, RevengeXposed) — most users
 
 1. Open Discord with Revenge installed.
-2. Go to **Settings → Revenge → Plugins**, tap the gear icon next to *Plugins*.
-3. Add the repository URL:
+2. Go to **Settings → Revenge → Plugins** and tap **Install a plugin**.
+3. Paste this ZIP URL:
+
+   ```
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.1.0.zip
+   ```
+
+4. Confirm the "unproxied external source" warning, then enable the plugin.
+
+The same ZIP is attached to the
+[latest release](https://github.com/Johndoehackie123/Performance-Enhancer/releases);
+sideload it by extracting it into `Revenge/plugins/johndoehackie123.performance-enhancer/`
+on your device, or install it with *Install from file* where that option exists.
+
+### Revenge Next
+
+1. **Settings → Revenge → Plugins** → gear icon next to *Plugins*.
+2. Add the repository URL:
 
    ```
    https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages
    ```
 
-4. Open **Browse Plugins**, install **Performance Enhancer**, then enable it.
-
-**Sideloading:** download the ZIP from the
-[releases page](https://github.com/Johndoehackie123/Performance-Enhancer/releases)
-and use *Install from file* in the same settings screen.
+3. Open **Browse Plugins**, install **Performance Enhancer**, then enable it.
 
 Every repository download is verified against the SHA-256 in `index.json`.
 
