@@ -4,13 +4,14 @@
 	"type": "module",
 	"description": "Revenge plugin repository for Performance Enhancer.",
 	"scripts": {
-		"build": "revenge-plugin build",
-		"build:dev": "revenge-plugin build --dev",
+		"build": "revenge-plugin build && node scripts/build-vendetta.mjs",
+		"build:dev": "revenge-plugin build --dev && node scripts/build-vendetta.mjs --dev",
 		"package": "node scripts/package.js",
 		"index": "node scripts/index.mjs index",
 		"plan-releases": "node scripts/plan.mjs",
 		"serve": "revenge-plugin serve",
-		"lint:types": "tsc -p plugins/performance-enhancer/tsconfig.json --noEmit"
+		"lint:types": "tsc -p plugins/performance-enhancer/tsconfig.json --noEmit",
+		"verify:stable": "node scripts/verify-stable.mjs"
 	},
 	"dependencies": {
 		"@revenge-mod/plugin-cli": "git+https://github.com/revenge-mod/revenge-plugin-cli.git",

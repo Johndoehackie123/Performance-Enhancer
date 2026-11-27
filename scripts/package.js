@@ -32,6 +32,12 @@ function runBuild() {
 		{ stdio: 'inherit' },
 	)
 	if (result.status !== 0) process.exit(result.status ?? 1)
+
+	// Stable-Revenge bundle. Revenge ships two plugin runtimes; the one Revenge
+	// Manager installs today is stable, so the artifact must carry a bundle that
+	// works there. See scripts/build-vendetta.mjs.
+	const stable = spawnSync(process.execPath, ['scripts/build-vendetta.mjs'], { stdio: 'inherit' })
+	if (stable.status !== 0) process.exit(stable.status ?? 1)
 }
 
 function zipDirectory(source, out) {

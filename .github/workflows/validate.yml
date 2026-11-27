@@ -45,6 +45,12 @@ jobs:
       - name: Build and package plugins
         run: bun run package
 
+      - name: Verify the artifact loads on both Revenge runtimes
+        # Revenge Manager ships the stable runtime, whose plugin contract differs
+        # from the Next repository format. This fails the build if the packaged
+        # bundle stops loading there, instead of shipping another 1.0.x.
+        run: node scripts/verify-stable.mjs
+
       - name: Generate repository index
         run: |
           bun run index -- \
