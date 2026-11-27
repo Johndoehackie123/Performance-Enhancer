@@ -131,9 +131,11 @@ export default plugin<{ jsonStorage: Settings }>({
 
 		if (getState().settings.performance.toastOnStart) {
 			try {
+				const icon = getAssetIdByName('SparklesIcon')
 				ToastActionCreators.open('performance-enhancer', {
 					text: `Performance Enhancer · ${getState().profile.label}`,
-					icon: getAssetIdByName('SparklesIcon'),
+					// Asset ids are accepted by most builds; older ones take an icon node.
+					icon: icon as never,
 					variant: 'success',
 				})
 			} catch (error) {

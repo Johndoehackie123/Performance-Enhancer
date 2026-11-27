@@ -28,18 +28,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        # bun is used because @revenge-mod/plugin-cli is installed from git and
+        # its `prepare` script builds the CLI, which needs the workspace peer
+        # @revenge-mod/types to be linked first. npm runs that script in
+        # isolation and fails; bun links workspace packages first.
+        run: bun install --frozen-lockfile
 
       - name: Type-check
-        run: npx tsc -p plugins/performance-enhancer/tsconfig.json --noEmit
+        run: bunx tsc -p plugins/performance-enhancer/tsconfig.json --noEmit
 
       - name: Build and package
-        run: npm run package
+        run: bun run package
 
       - name: Check out the published pool
         env:
@@ -89,7 +97,7 @@ jobs:
           fi
           BASE="${BASE%/}"
           echo "Serving the pool from ${BASE}/pool"
-          npm run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"
+          bun run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"
 
       - name: Commit the pool
         if: steps.plan.outputs.count != '0'

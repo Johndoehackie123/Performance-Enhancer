@@ -105,21 +105,28 @@ Heap usage, cache trims, bytes released, gateway bursts, dispatch counts
 ## Building
 
 ```bash
-npm install --legacy-peer-deps
-npm run lint:types     # type-check
-npm run build          # bundle JS into plugins/*/build/js/index.js
-npm run package        # bundle + write build/dist/<id>@<version>.zip
-npm run index -- --dist build/dist --base-url https://example.com/pool --out index.json
+bun install            # required: see the note below
+bun run lint:types     # type-check
+bun run build          # bundle JS into plugins/*/build/js/index.js
+bun run package        # bundle + write build/dist/<id>@<version>.zip
+bun run index -- --dist build/dist --base-url https://example.com/pool --out index.json
 ```
 
-Requires Node 22.18+. The plugin uses `@revenge-mod/plugin-cli` and
-`@revenge-mod/types` from the official Revenge repositories, declared as git
+Requires bun 1.2+ (or Node 22.18+ for the scripts, with `npx tsc` for types).
+The plugin uses `@revenge-mod/plugin-cli`, `@revenge-mod/types` and
+`@revenge-mod/themes-api` from the official Revenge repositories, declared as git
 dependencies in `package.json`.
+
+> **Use bun, not npm.** `@revenge-mod/plugin-cli` is installed from git, so npm
+> runs its `prepare` script (`tsc`) in isolation before the workspace peer
+> `@revenge-mod/types` is linked, and the install fails. bun links workspace
+> packages first, which is also why the official Revenge template uses it.
+> `bun.lock` is committed so CI installs the exact CLI revision.
 
 ### Testing on a device
 
 ```bash
-npm run serve          # serves a local repository with the built ZIP
+bun run serve          # serves a local repository with the built ZIP
 ```
 
 Then open the URL printed by the CLI in **Settings → Revenge → Plugins**.

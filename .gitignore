@@ -7,10 +7,9 @@ dist/
 published/
 *.tsbuildinfo
 
-# Lockfiles are kept out so the repository stays package-manager agnostic
-# (CI installs with npm; the CLI and Gradle accept bun as well).
+# bun.lock is committed: it pins the revision of the git-installed
+# @revenge-mod packages that the build depends on.
 package-lock.json
-bun.lock
 bun.lockb
 deno.lock
 
