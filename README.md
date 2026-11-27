@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.0.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.1.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
