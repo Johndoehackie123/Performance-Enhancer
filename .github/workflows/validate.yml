@@ -1,0 +1,49 @@
+# PR build validation: type-check, build every plugin, and prove the repository
+# index can be generated from the resulting artifacts.
+
+name: Validate
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - 'types/**'
+      - 'scripts/**'
+      - '.github/**'
+      - 'repo.config.json'
+      - 'package.json'
+      - 'tsconfig.base.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      - name: Type-check
+        run: npx tsc -p plugins/performance-enhancer/tsconfig.json --noEmit
+
+      - name: Build and package plugins
+        run: npm run package
+
+      - name: Generate repository index
+        run: |
+          npm run index -- \
+            --dist build/dist \
+            --base-url https://revenge.local \
+            --out /tmp/index.json
+          cat /tmp/index.json
+
+      - name: Verify artifacts
+        run: node scripts/index.mjs scan --dist build/dist --out /tmp/pool.json && cat /tmp/pool.json

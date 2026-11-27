@@ -1,0 +1,68 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": {
+					"level": "on",
+					"options": {
+						"groups": [{ "type": false }]
+					}
+				}
+			}
+		}
+	},
+	"files": {
+		"includes": ["**/*.js", "**/*.json", "**/*.ts", "**/*.tsx", "**/*.jsx", "**/*.mjs"],
+		"ignoreUnknown": true
+	},
+	"formatter": {
+		"useEditorconfig": true
+	},
+	"javascript": {
+		"formatter": {
+			"arrowParentheses": "asNeeded",
+			"enabled": true,
+			"quoteProperties": "asNeeded",
+			"quoteStyle": "single",
+			"semicolons": "asNeeded",
+			"trailingCommas": "all"
+		}
+	},
+	"json": {
+		"parser": {
+			"allowComments": true,
+			"allowTrailingCommas": true
+		}
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"complexity": {
+				"noBannedTypes": "warn",
+				"noCommaOperator": "off",
+				"useArrowFunction": "warn"
+			},
+			"performance": {
+				"noDelete": "warn"
+			},
+			"style": {
+				"noNonNullAssertion": "off",
+				"useImportType": {
+					"level": "warn",
+					"options": { "style": "separatedType" }
+				},
+				"useNodejsImportProtocol": "off",
+				"useTemplate": "warn"
+			},
+			"suspicious": {
+				"noAssignInExpressions": "off",
+				"noConfusingVoidType": "off",
+				"noExplicitAny": "off",
+				"useIterableCallbackReturn": "off"
+			}
+		}
+	}
+}

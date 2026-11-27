@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+published/
+*.tsbuildinfo
+
+# Lockfiles are kept out so the repository stays package-manager agnostic
+# (CI installs with npm; the CLI and Gradle accept bun as well).
+package-lock.json
+bun.lock
+bun.lockb
+deno.lock
+
+# Local artifacts
+*.zip
+!build/dist/*.zip
+.releases.json
+
+# Editor / OS
+.DS_Store
+.idea/
+*.log

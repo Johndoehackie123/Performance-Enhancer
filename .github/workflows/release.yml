@@ -1,0 +1,124 @@
+# Releases Performance Enhancer whenever the version in a manifest.json is not
+# yet in the published pool, then rebuilds the repository index on the pool
+# branch (gh-pages by default).
+#
+# The pool is the only ledger: a version is "released" when
+# `<id>@<version>.zip` exists there. Re-running the workflow is therefore always
+# safe, and a failed run publishes nothing.
+
+name: Release plugin
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-pool
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      - name: Type-check
+        run: npx tsc -p plugins/performance-enhancer/tsconfig.json --noEmit
+
+      - name: Build and package
+        run: npm run package
+
+      - name: Check out the published pool
+        env:
+          POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
+          POOL_DIR: published
+        run: |
+          git fetch origin "${POOL_BRANCH}" || true
+          if git rev-parse --verify "origin/${POOL_BRANCH}" >/dev/null 2>&1; then
+            git worktree add --detach "${POOL_DIR}" "origin/${POOL_BRANCH}"
+          else
+            echo "Pool branch does not exist yet; creating it."
+            git worktree add --detach "${POOL_DIR}" HEAD
+            git -C "${POOL_DIR}" checkout --orphan "${POOL_BRANCH}"
+            git -C "${POOL_DIR}" rm -rf --cached . >/dev/null 2>&1 || true
+            rm -rf "${POOL_DIR:?}"/* 2>/dev/null || true
+          fi
+          mkdir -p "${POOL_DIR}/pool"
+
+      - name: Plan releases
+        id: plan
+        env:
+          POOL_DIR: published
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: node scripts/plan.mjs --pool "${POOL_DIR}/pool" --out "${RUNNER_TEMP}/plan.json"
+
+      - name: Publish artifacts to the pool
+        if: steps.plan.outputs.count != '0'
+        env:
+          POOL_DIR: published
+          PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: node scripts/publish.mjs --plan "${RUNNER_TEMP}/plan.json" --pool "${POOL_DIR}/pool"
+
+      - name: Regenerate index.json
+        if: steps.plan.outputs.count != '0'
+        env:
+          POOL_DIR: published
+          POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
+          PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
+        run: |
+          BASE="${{ vars.PAGES_BASE_URL }}"
+          if [ -z "$BASE" ]; then
+            OWNER="${GITHUB_REPOSITORY%%/*}"; REPO="${GITHUB_REPOSITORY#*/}"
+            OWNER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+            BASE="https://${OWNER}.github.io"
+            if [ "$REPO" != "${OWNER}.github.io" ]; then BASE="${BASE}/${REPO}"; fi
+          fi
+          BASE="${BASE%/}"
+          echo "Serving the pool from ${BASE}/pool"
+          npm run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"
+
+      - name: Commit the pool
+        if: steps.plan.outputs.count != '0'
+        env:
+          POOL_DIR: published
+          POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
+        run: |
+          cd "${POOL_DIR}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pool index.json
+          if git diff --cached --quiet; then
+            echo "Pool already holds this plan."
+            exit 0
+          fi
+          git commit -m "Publish plugin release(s)"
+          git push origin HEAD:"${POOL_BRANCH}"
+
+      - name: Create GitHub releases
+        if: steps.plan.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POOL_DIR: published
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: node scripts/tag.mjs --plan "${RUNNER_TEMP}/plan.json"
+
+      - name: Clean up
+        if: always()
+        env:
+          POOL_DIR: published
+        run: git worktree remove --force "${POOL_DIR}" || true
