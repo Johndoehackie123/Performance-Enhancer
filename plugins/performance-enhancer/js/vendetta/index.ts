@@ -18,7 +18,7 @@
 import { resolveProfile } from '../profiles'
 import { DEFAULT_SETTINGS, type Settings } from '../shared'
 import { buildTokens } from '../styles/engine'
-import { apiOrNull, bindApi, toast } from './bridge'
+import { apiOrNull, bindApi, loaderHost, toast } from './bridge'
 import { definePlugin } from './define'
 import { detectDevice } from './device'
 import { installRuntime } from './runtime'
@@ -57,15 +57,8 @@ const hooks: Hooks = {
  * still resolves the API when Revenge renders it much later.
  */
 try {
-	// bunny (stable parameter), then stable's global, then the modern globals.
-	const fromLoader =
-		typeof bunny !== 'undefined'
-			? bunny
-			: ((globalThis as any).bunny ??
-				(globalThis as any).vendetta ??
-				(globalThis as any).valenced ??
-				(globalThis as any).revenge)
-	bindApi(fromLoader)
+	// The binding the loader scopes into the source — always the truth.
+	bindApi(loaderHost())
 } catch {}
 
 let loggedIn = false
@@ -92,9 +85,7 @@ const options = definePlugin({
 	onLoad(this: { id?: string; storage?: PluginStorage }) {
 		// The API is the object the loader passed in; capturing it here means the
 		// settings screen works even though it renders much later.
-		const g = globalThis as any
-		const loaderApi = apiOrNull() ?? g.vendetta ?? g.valenced ?? g.revenge ?? g.bunny
-		bindApi(loaderApi)
+		bindApi(loaderHost())
 
 		attachStorage(this?.storage as PluginStorage | undefined)
 		attachStorageFromLoader()
@@ -107,8 +98,7 @@ const options = definePlugin({
 	 * The settings are read from the jsonStorage document before `start` runs.
 	 */
 	async init(api?: Parameters<typeof attachModernStorage>[0]) {
-		const g = globalThis as any
-		bindApi(g.valenced ?? g.revenge ?? g.bunny ?? g.vendetta)
+		bindApi(loaderHost())
 		await attachModernStorage(api as any)
 		patchDiagnostics({ heapUsedMb: readHeap() })
 		logOnce()
@@ -122,9 +112,7 @@ const options = definePlugin({
 		this: { storage?: PluginStorage },
 		modernApi?: { cleanup?: (...fns: (() => void)[]) => void },
 	) {
-		const g = globalThis as any
-		const loaderApi = apiOrNull() ?? g.valenced ?? g.revenge ?? g.vendetta
-		bindApi(loaderApi)
+		bindApi(loaderHost())
 		attachStorage(this?.storage as PluginStorage | undefined)
 		attachStorageFromLoader()
 		// Modern runtimes expect cleanups through the lifecycle API; releasing

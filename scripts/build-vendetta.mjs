@@ -23,9 +23,12 @@
  * side is an IIFE: the assignment sets the stable global, and the IIFE's value
  * is what the modern loaders return.
  *
- * React, React Native and the JSX runtime are resolved from the host at call
- * time — `host.react.*` on the modern runtimes, `host.metro.common.*` on the
- * stable one — so a single bundle works against both API trees.
+ * React, React Native and the JSX runtime are handed to the bundle as LAZY
+ * FORWARDING NAMESPACES (`__peLazy`, see GLOBALS): every property read hits
+ * the host at that moment — `host.react.*` on the modern runtimes,
+ * `host.metro.common.*` on the stable one — so evaluation succeeding while
+ * React is still uninitialized is harmless, and the stable orderings are
+ * irrelevant. A single bundle works against every API tree.
  */
 import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -59,10 +62,56 @@ const ACCESSOR = '__peHost'
  * keeps it on `host.metro.common.*`. The stable runtime also re-exports the
  * JSX runtime as `host._jsx`. The first hit wins on every client.
  */
+/**
+ * The modern runtimes create their plugin scope BEFORE the React module is
+ * found (the plugins' preInit phase runs before Discord's metro bundle has
+ * evaluated the React module), so asking `react.React` for its value at plugin
+ * evaluation time yields `undefined` — permanently, because a plain argument
+ * captures the value at that instant. Every crash of this class looked like
+ * `TypeError: undefined is not a function` at the first hook call.
+ *
+ * The fix hands the bundle a Proxy per external whose getters resolve the
+ * real host module at ACCESS time (render time), when it exists. The bundler's
+ * CJS interop enumerates each external's keys ONCE at evaluation time and
+ * copies them into a fresh namespace — whose copied getters delegate right
+ * back into the proxy, so reads still land on the live module. Enumeration at
+ * that early moment cannot see the not-yet-loaded module, so the proxy reports
+ * a fixed, complete key list instead of the module's current (empty) one.
+ * Valenced's own production code ships `new Proxy` on this same Hermes, so
+ * Proxy is a safe mechanism here.
+ */
+// Complete export keys of the React namespace (react@17/18). Reads of any key
+// the device's copy lacks come back undefined; enumeration needs the full set.
+const REACT_KEYS = [
+	'Children', 'Component', 'Fragment', 'Profiler', 'StrictMode', 'Suspense',
+	'cloneElement', 'createContext', 'createElement', 'createFactory', 'createRef',
+	'forwardRef', 'isValidElement', 'lazy', 'memo', 'startTransition',
+	'useCallback', 'useContext', 'useDebugValue', 'useDeferredValue', 'useEffect',
+	'useId', 'useImperativeHandle', 'useInsertionEffect', 'useLayoutEffect', 'useMemo',
+	'useReducer', 'useRef', 'useState', 'useSyncExternalStore', 'useTransition',
+	'render', 'hydrate', 'unmountComponentAtNode', 'findDOMNode', 'act', 'version',
+]
+const REACT_NATIVE_KEYS = [
+	'AccessibilityInfo', 'ActivityIndicator', 'Alert', 'Animated', 'AppRegistry', 'AppState',
+	'Appearance', 'BackHandler', 'Button', 'CheckBox', 'Clipboard', 'Colors', 'DebugContainer',
+	'DevSettings', 'DeviceEventEmitter', 'Dimensions', 'DrawerAndroid', 'Easing', 'FlatList',
+	'I18nManager', 'Image', 'ImageBackground', 'InteractionManager', 'Keyboard',
+	'LayoutAnimation', 'ListView', 'LogBox', 'Modal', 'NativeEventEmitter', 'NativeModules',
+	'NetInfo', 'PanResponder', 'PermissionsAndroid', 'PixelRatio', 'Platform', 'PlatformColor',
+	'Pressable', 'ProgressBarAndroid', 'ProgressViewIOS', 'RefreshControl', 'SafeAreaView',
+	'ScrollView', 'SectionList', 'Share', 'Slider', 'StatusBar', 'StyleSheet', 'Switch',
+	'Text', 'TextInput', 'ToastAndroid', 'Touchable', 'TouchableHighlight',
+	'TouchableNativeFeedback', 'TouchableOpacity', 'TouchableWithoutFeedback',
+	'UIManager', 'Vibration', 'View', 'VirtualizedList',
+	'findNodeHandle', 'isNewArchitectureEnabled', 'TurboModuleRegistry',
+]
+const JSX_RUNTIME_KEYS = ['jsx', 'jsxs', 'jsxDEV', 'Fragment']
+const keysLiteral = keys => `[${keys.map(key => `'${key}'`).join(',')}]`
+
 const GLOBALS = {
-	react: `(${ACCESSOR}().react?.React??${ACCESSOR}().metro?.common?.React)`,
-	'react-native': `(${ACCESSOR}().react?.ReactNative??${ACCESSOR}().metro?.common?.ReactNative)`,
-	'react/jsx-runtime': `(${ACCESSOR}().react?.ReactJSXRuntime??${ACCESSOR}().react?.jsxRuntime??${ACCESSOR}()._jsx??${ACCESSOR}().metro?.common?.ReactJSXRuntime)`,
+	react: `__peLazy(function(){return ${ACCESSOR}().react?.React??${ACCESSOR}().metro?.common?.React},${keysLiteral(REACT_KEYS)})`,
+	'react-native': `__peLazy(function(){return ${ACCESSOR}().react?.ReactNative??${ACCESSOR}().react?.native??${ACCESSOR}().metro?.common?.ReactNative},${keysLiteral(REACT_NATIVE_KEYS)})`,
+	'react/jsx-runtime': `__peLazy(function(){return ${ACCESSOR}().react?.ReactJSXRuntime??${ACCESSOR}().react?.jsxRuntime??${ACCESSOR}()._jsx??${ACCESSOR}().metro?.common?.ReactJSXRuntime},${keysLiteral(JSX_RUNTIME_KEYS)})`,
 }
 
 const external = id => id in GLOBALS
@@ -119,8 +168,9 @@ const hermesPlugin = {
  */
 const ACCESSOR_DECL =
 	`function ${ACCESSOR}(){` +
-	'var host=typeof bunny<"u"?bunny:(globalThis.bunny??globalThis.vendetta??globalThis.valenced??globalThis.revenge);' +
-	'return host??{metro:{common:{}}};}'
+	'var host=typeof bunny<"u"?bunny:(typeof valenced<"u"?valenced:(typeof revenge<"u"?revenge:(globalThis.bunny??globalThis.vendetta??globalThis.valenced??globalThis.revenge)));' +
+	'return host??{metro:{common:{}}};}' +
+	'\nfunction __peLazy(resolve,keys){var keySet=null;function has(key){if(!keys)return true;if(!keySet){keySet={};for(var i=0;i<keys.length;i++)keySet[keys[i]]=1}return!!keySet[key]}return new Proxy({},{get(_,key){try{var m=resolve();return m==null?undefined:m[key]}catch{return undefined}},has(_,key){return has(key)},ownKeys(){var out=keys?keys.slice():[];try{var m=resolve();if(m&&!keys)out=Reflect.ownKeys(m)}catch{}return out},getOwnPropertyDescriptor(_,key){if(!has(key))return undefined;return{enumerable:true,configurable:true,get:function(){try{var m=resolve();return m==null?undefined:m[key]}catch{return undefined}}}}})}'
 
 async function main() {
 	if (!existsSync(ENTRY)) {
