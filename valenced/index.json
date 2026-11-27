@@ -1,0 +1,31 @@
+{
+	"format": 1,
+	"name": "Performance Enhancer",
+	"description": "Adaptive performance and stability tuning for Revenge, with RAM/SoC-aware profiles and Material, Glassmorphism and Liquid Frost UI styling.",
+	"plugins": {
+		"johndoehackie123.performance-enhancer": {
+			"name": "Performance Enhancer",
+			"description": "RAM and SoC aware performance, memory and stability tuning, plus Material, Glassmorphism, Liquid Frost and custom visual styles.",
+			"author": "Johndoehackie123",
+			"icon": "SparklesIcon",
+			"channels": {
+				"latest": "1.2.0"
+			},
+			"versions": {
+				"1.2.0": {
+					"url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/valenced/johndoehackie123.performance-enhancer@1.2.0.zip",
+					"sha256": "35dfa805e726e88c4a0269f9c7e754d2d32e5128102cc95590a9f2b321669dfe",
+					"size": 10392,
+					"dependencies": {
+						"valenced.api": {
+							"version": ">=1 <2"
+						},
+						"discord": {
+							"version": "*"
+						}
+					}
+				}
+			}
+		}
+	}
+}
