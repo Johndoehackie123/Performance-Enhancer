@@ -134,6 +134,32 @@ function globalHost(): VendettaApi | undefined {
 }
 
 /**
+ * The binding the loader scopes into the bundle's source.
+ *
+ * This is the most reliable reference the plugin will ever have: it exists
+ * from the first byte of evaluation, it never depends on an internal plugin
+ * having installed a global, and it survives globals being deleted again in a
+ * cleanup (Valenced does exactly this for `globalThis.valenced`).
+ */
+export function loaderHost(): VendettaApi | undefined {
+	try {
+		if (typeof bunny !== 'undefined' && bunny) return bunny as VendettaApi
+	} catch {}
+	try {
+		if (typeof valenced !== 'undefined' && valenced) return valenced as VendettaApi
+	} catch {}
+	try {
+		if (typeof revenge !== 'undefined' && revenge) return revenge as VendettaApi
+	} catch {}
+	return undefined
+}
+
+/** Loader parameter first, then the globals, then nothing. */
+function host(): VendettaApi | undefined {
+	return loaderHost() ?? globalHost()
+}
+
+/**
  * Resolves the loader API.
  *
  * The loader passes it as a parameter, the global holds the same object, and
@@ -142,9 +168,9 @@ function globalHost(): VendettaApi | undefined {
  */
 export function api(): VendettaApi {
 	if (vendettaApi) return vendettaApi
-	const fromGlobal = globalHost()
-	if (fromGlobal) {
-		vendettaApi = fromGlobal
+	const resolved = host()
+	if (resolved) {
+		vendettaApi = resolved
 		return vendettaApi
 	}
 	throw new Error('[perf] plugin API unavailable in this runtime')

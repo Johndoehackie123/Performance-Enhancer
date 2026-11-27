@@ -134,22 +134,37 @@ function mockStableHost() {
 		View: 'View',
 		Text: 'Text',
 		Pressable: 'Pressable',
+		TextInput: 'TextInput',
 	}
 
-	const api = {
-		_jsx: jsxRuntime,
-		metro: {
-			common: {
-				React,
-				ReactNative,
-				FluxDispatcher: {
-					dispatch() {},
-					subscribe(type, callback) {
-						subscriptions.push([type, callback])
-						return () => {}
-					},
-				},
+	// React modules resolve only when the app gets that far; the plugin's
+	// evaluation (preInit) happens BEFORE that on the device.
+	let reactReady = false
+	const late = value => ({
+		configurable: true,
+		enumerable: true,
+		get: () => (reactReady ? value : undefined),
+	})
+	const metroCommon = {}
+	Object.defineProperties(metroCommon, {
+		React: late(React),
+		ReactNative: late(ReactNative),
+		ReactJSXRuntime: late(jsxRuntime),
+	})
+	Object.defineProperty(metroCommon, 'FluxDispatcher', {
+		enumerable: true,
+		value: {
+			dispatch() {},
+			subscribe(type, callback) {
+				subscriptions.push([type, callback])
+				return () => {}
 			},
+		},
+	})
+
+	const api = {
+		metro: {
+			common: metroCommon,
 			findByProps: (...props) => {
 				if (props.includes('queryCache')) return { queryCache: cache }
 				if (props.includes('jsx')) return jsxRuntime
@@ -190,7 +205,22 @@ function mockStableHost() {
 		}),
 	}
 
-	return { api, subscriptions, toasts, jsxRuntime, originalJsx }
+	Object.defineProperty(api, '_jsx', {
+		configurable: true,
+		enumerable: true,
+		get: () => (reactReady ? jsxRuntime : undefined),
+	})
+
+	return {
+		api,
+		subscriptions,
+		toasts,
+		jsxRuntime,
+		originalJsx,
+		setReady() {
+			reactReady = true
+		},
+	}
 }
 
 /**
@@ -229,7 +259,25 @@ function mockModernHost(namespace) {
 		View: 'View',
 		Text: 'Text',
 		Pressable: 'Pressable',
+		TextInput: 'TextInput',
 	}
+
+	// Mirrors Valenced: the plugin's preInit runs BEFORE the React modules are
+	// found, so every react.* read must be late-bound to stay honest.
+	let reactReady = false
+	const late = value => ({
+		configurable: true,
+		enumerable: true,
+		get: () => (reactReady ? value : undefined),
+	})
+	const reactApi = {}
+	Object.defineProperties(reactApi, {
+		React: late(React),
+		ReactNative: late(ReactNative),
+		ReactJSXRuntime: late(jsxRuntime),
+		jsxRuntime: late(jsxRuntime),
+		native: late(ReactNative),
+	})
 
 	const withProps = (...props) => ({ __withProps: props })
 
@@ -247,14 +295,7 @@ function mockModernHost(namespace) {
 		},
 		patcher: { before: () => () => {}, after: () => () => {}, instead: () => () => {} },
 		plugins: { restart: async () => {}, stop: async () => {} },
-		react: {
-			...React,
-			React,
-			ReactNative,
-			ReactJSXRuntime: jsxRuntime,
-			jsxRuntime,
-			native: ReactNative,
-		},
+		react: reactApi,
 		assets: { getAssetIdByName: () => 42 },
 		externals: {},
 		utils: {},
@@ -323,7 +364,16 @@ function mockModernHost(namespace) {
 		return { lifecycle, cleanups }
 	}
 
-	return { api, jsxRuntime, fluxHandlers, toasts, makeLifecycleApi }
+	return {
+		api,
+		jsxRuntime,
+		fluxHandlers,
+		toasts,
+		makeLifecycleApi,
+		setReady() {
+			reactReady = true
+		},
+	}
 }
 
 /* ---------------------------------------------------------- manifest mirrors */
@@ -453,6 +503,8 @@ function runStable(label, source) {
 		check(label, 'start() runs', false, error.message)
 	}
 
+	// By the time the settings screen renders, the app has found its modules.
+	host.setReady()
 	try {
 		const tree = plugin.SettingsComponent({})
 		renderTree(tree)
@@ -500,6 +552,9 @@ async function runModern(label, source, namespace) {
 			'plugin',
 			`return ${source}\n//# sourceURL=${sourceUrl}`,
 		)(host.api, o => o)?.default
+		// Valenced's own preinit deletes globalThis.valenced in its cleanup;
+		// nothing after evaluation may depend on the global surviving.
+		delete globalThis[namespace]
 		check(label, 'createOptionsFactory-style evaluation returns the options object', Boolean(options && typeof options === 'object'))
 	} catch (error) {
 		check(label, 'createOptionsFactory-style evaluation returns the options object', false, error.message)
@@ -544,6 +599,7 @@ async function runModern(label, source, namespace) {
 
 	check(label, 'shows the start-up toast', host.toasts.length > 0)
 
+	host.setReady()
 	try {
 		const tree = options.SettingsComponent({})
 		renderTree(tree)

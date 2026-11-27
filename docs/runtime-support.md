@@ -2,9 +2,9 @@
 
 The plugin ships **one JS bundle** that runs on all of the currently supported
 Android clients, and **one ZIP per client** because the clients disagree on the
-manifest contract. 1.2.2 is the first release that is known to install, enable and
+manifest contract. 1.2.3 is the first release that is known to install, enable and
 open the settings screen on **Valenced** and on **Revenge** — 1.2.0 crashed in
-`init`, and 1.2.1 crashed when the settings screen mounted (see below).
+`init`, and 1.2.1/1.2.2 crashed when the settings screen mounted (see below).
 
 | | Stable (Revenge Manager, RevengeXposed) | Next (`revenge-bundle-next`) | Valenced (`valenced`) |
 | --- | --- | --- | --- |
@@ -63,11 +63,11 @@ bundle if it references any global the runtime demonstrably does not provide
 (`structuredClone`, `Object.hasOwn`, `Array.prototype.at`, `Promise.allSettled`,
 etc.). That check runs in CI on every build.
 
-## Why 1.2.1 crashed when opening the settings screen
+## Why 1.2.1 crashed when opening the settings screen (and why 1.2.2 didn't fix it)
 
-1.2.1 installed, enabled and survived `init`/`start` — then crashed the moment
-the settings screen rendered, with the screen's own error surfaced through
-Valenced's `PluginSettings` boundary:
+1.2.1 and 1.2.2 both installed, enabled and survived `init`/`start` — then
+crashed the moment the settings screen mounted, with the screen's own error
+surfaced through Valenced's `PluginSettings` boundary:
 
 ```
 TypeError: undefined is not a function
@@ -76,19 +76,46 @@ TypeError: undefined is not a function
   at renderWithHooks
 ```
 
-`Ke` is the settings screen's store hook. It used React 18's
-`useSyncExternalStore`, which Discord's Android renderer does not implement —
-the dispatcher simply has no such function. That is the classic
-"`dispatcher.useSyncExternalStore is not a function`" failure
+`Ke` is the settings screen's store hook. The first fix (1.2.2) removed React
+18's `useSyncExternalStore`, because RN 0.68/0.69-class renderers lack that
+dispatcher slot
 ([TanStack/query#3839](https://github.com/TanStack/query/issues/3839),
-[endograph/redux-persist#1380](https://github.com/endograph/redux-persist/issues/1380)):
-RN 0.68/0.69-class toolchains ship a React whose renderer predates the hook.
+[endograph/redux-persist#1380](https://github.com/endograph/redux-persist/issues/1380)) —
+still correct as defense-in-depth, but it was not the crash. 1.2.2 crashed at
+the exact same place.
 
-1.2.2 drops `useSyncExternalStore` entirely. The settings store subscribes via
-`useReducer` + `useEffect` (React ≥16.8), which every Android renderer ships,
-and the verifier now renders the whole settings tree against a React-17-class
-mock (no `useSyncExternalStore`, actual component invocation) so this class of
-render-time crash fails CI instead of the user's phone.
+The real root cause: **the plugin script is evaluated during Valenced's
+`preInit` phase, before Discord's React module exists** (Valenced resolves it
+lazily via its own `waitForModules(withProps('useState'))`). The bundle used to
+capture the React namespace as a plain IIFE argument at evaluation time
+(`__peHost().react?.React`), so the captured binding was permanently
+`undefined` — and every hook call threw `undefined is not a function`.
+Additionally, Valenced's internal `api.hidden` plugin deletes
+`globalThis.valenced` again in its cleanup, so nothing resolved late through
+the global could survive either.
+
+1.2.3 fixes the class, in three parts:
+
+- The bundle hands out **lazy forwarding proxies** for React, React Native and
+  the JSX runtime (`__peLazy` in `scripts/build-vendetta.mjs`): every property
+  read hits the host at access time. The proxies report a fixed, complete key
+  list and implement `ownKeys`/`getOwnPropertyDescriptor`, because rolldown's
+  CJS interop enumerates the externals once at evaluation time (when the host
+  modules still don't exist) — without those traps the interop produced a
+  `{ default: <proxy> }` stub with no hooks at all.
+- Host resolution prefers the loader-scoped bindings (`bunny` / `valenced` /
+  `revenge` function parameters) over the globals, which may be deleted by the
+  client at any time.
+- The verifier now simulates the whole scene: `react.*` reads return
+  `undefined` until after evaluation (like preInit), the settings tree is
+  rendered through real component invocation, and the modern runs delete the
+  `valenced`/`revenge` global right after evaluation to mirror Valenced's own
+  cleanup. The published 1.2.2 artifacts fail these checks with the exact
+  device error; 1.2.3 passes them.
+
+An earlier version of this document told the `useSyncExternalStore` story as
+the root cause. That was wrong; it is kept here only as context for why the
+hook is gone (it belongs to React 18 renderers and this renderer predates it).
 
 One manifest cannot serve both modern clients: Revenge's reserved dependency set
 is `revenge.api` + `discord`, Valenced's is `valenced.api` + `discord`, and in
@@ -151,7 +178,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.2.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.3.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**
