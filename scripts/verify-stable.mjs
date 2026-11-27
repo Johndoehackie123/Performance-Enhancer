@@ -59,6 +59,35 @@ function check(label, name, condition, detail) {
 	}
 }
 
+/**
+ * Renders a JSX element tree the way a React >=16.8 renderer would: every
+ * function component is invoked with its props until only host-like elements
+ * remain. Far more sensitive than `Boolean(SettingsComponent({}))`, which only
+ * proves the factory returns an object — a crash inside any component (like
+ * the `useSyncExternalStore` dispatcher call on Android) is invisible there.
+ */
+function renderTree(root) {
+	const stack = [root]
+	let rendered = 0
+	while (stack.length) {
+		if (++rendered > 1000) throw new Error('renderTree: tree too large or cyclic')
+		const node = stack.pop()
+		if (node == null || typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') continue
+		if (Array.isArray(node)) {
+			stack.push(...node)
+			continue
+		}
+		if (typeof node !== 'object') continue
+		const { type, props } = node
+		if (typeof type === 'function') {
+			stack.push(type(props ?? {}))
+			continue
+		}
+		if (props?.children != null) stack.push(props.children)
+	}
+	return rendered
+}
+
 /* ---------------------------------------------------------------- mock hosts */
 
 const ALL_GLOBALS = ['bunny', 'vendetta', 'valenced', 'revenge', 'plugin']
@@ -82,13 +111,20 @@ function mockStableHost() {
 
 	const originalJsx = (type, props) => ({ type, props })
 	const jsxRuntime = { jsx: originalJsx, jsxs: originalJsx, Fragment: Symbol('fragment') }
+	// Deliberately NO React 18-only APIs: see the modern mock above.
 	const React = {
 		createElement: originalJsx,
 		isValidElement: () => true,
+		useState: initial => {
+			const value = typeof initial === 'function' ? initial() : initial
+			return [value, () => {}]
+		},
+		useReducer: (_reducer, initial, init) => [init ? init(initial) : initial, () => {}],
 		useMemo: fn => fn(),
-		useSyncExternalStore: (_subscribe, get) => get(),
-		useReducer: (_reducer, initial) => [initial, () => {}],
+		useCallback: fn => fn,
+		useRef: value => ({ current: value }),
 		useEffect: () => {},
+		useLayoutEffect: () => {},
 		Fragment: Symbol('fragment'),
 	}
 	const ReactNative = {
@@ -169,13 +205,21 @@ function mockModernHost(namespace) {
 		const f = (type, props) => ({ type, props })
 		return { jsx: f, jsxs: f, Fragment: Symbol('fragment') }
 	})()
+	// Deliberately NO React 18-only APIs: Discord's Android renderer does not
+	// implement useSyncExternalStore, so the bundle must not need it.
 	const React = {
 		createElement: (type, props) => ({ type, props }),
 		isValidElement: () => true,
+		useState: initial => {
+			const value = typeof initial === 'function' ? initial() : initial
+			return [value, () => {}]
+		},
+		useReducer: (_reducer, initial, init) => [init ? init(initial) : initial, () => {}],
 		useMemo: fn => fn(),
-		useSyncExternalStore: (_subscribe, get) => get(),
-		useReducer: (_reducer, initial) => [initial, () => {}],
+		useCallback: fn => fn,
+		useRef: value => ({ current: value }),
 		useEffect: () => {},
+		useLayoutEffect: () => {},
 		Fragment: Symbol('fragment'),
 	}
 	const ReactNative = {
@@ -411,9 +455,10 @@ function runStable(label, source) {
 
 	try {
 		const tree = plugin.SettingsComponent({})
-		check(label, 'SettingsComponent renders', Boolean(tree))
+		renderTree(tree)
+		check(label, 'SettingsComponent renders the full tree', true)
 	} catch (error) {
-		check(label, 'SettingsComponent renders', false, error.message)
+		check(label, 'SettingsComponent renders the full tree', false, error.message)
 	}
 
 	check(
@@ -501,9 +546,10 @@ async function runModern(label, source, namespace) {
 
 	try {
 		const tree = options.SettingsComponent({})
-		check(label, 'SettingsComponent renders', Boolean(tree))
+		renderTree(tree)
+		check(label, 'SettingsComponent renders the full tree', true)
 	} catch (error) {
-		check(label, 'SettingsComponent renders', false, error.message)
+		check(label, 'SettingsComponent renders the full tree', false, error.message)
 	}
 
 	try {

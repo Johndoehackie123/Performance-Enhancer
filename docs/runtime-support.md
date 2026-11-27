@@ -2,7 +2,9 @@
 
 The plugin ships **one JS bundle** that runs on all of the currently supported
 Android clients, and **one ZIP per client** because the clients disagree on the
-manifest contract. Version 1.2.1 is the first release that works on **Valenced** and on **Revenge** (1.2.0 installed on Valenced but crashed in `init`; see below).
+manifest contract. 1.2.2 is the first release that is known to install, enable and
+open the settings screen on **Valenced** and on **Revenge** — 1.2.0 crashed in
+`init`, and 1.2.1 crashed when the settings screen mounted (see below).
 
 | | Stable (Revenge Manager, RevengeXposed) | Next (`revenge-bundle-next`) | Valenced (`valenced`) |
 | --- | --- | --- | --- |
@@ -60,6 +62,33 @@ JSON data and adds a check to `scripts/verify-stable.mjs` that rejects the
 bundle if it references any global the runtime demonstrably does not provide
 (`structuredClone`, `Object.hasOwn`, `Array.prototype.at`, `Promise.allSettled`,
 etc.). That check runs in CI on every build.
+
+## Why 1.2.1 crashed when opening the settings screen
+
+1.2.1 installed, enabled and survived `init`/`start` — then crashed the moment
+the settings screen rendered, with the screen's own error surfaced through
+Valenced's `PluginSettings` boundary:
+
+```
+TypeError: undefined is not a function
+  at Ke (Valenced:Plugin:johndoehackie123.performance-enhancer)
+  at Xe (Valenced:Plugin:johndoehackie123.performance-enhancer)
+  at renderWithHooks
+```
+
+`Ke` is the settings screen's store hook. It used React 18's
+`useSyncExternalStore`, which Discord's Android renderer does not implement —
+the dispatcher simply has no such function. That is the classic
+"`dispatcher.useSyncExternalStore is not a function`" failure
+([TanStack/query#3839](https://github.com/TanStack/query/issues/3839),
+[endograph/redux-persist#1380](https://github.com/endograph/redux-persist/issues/1380)):
+RN 0.68/0.69-class toolchains ship a React whose renderer predates the hook.
+
+1.2.2 drops `useSyncExternalStore` entirely. The settings store subscribes via
+`useReducer` + `useEffect` (React ≥16.8), which every Android renderer ships,
+and the verifier now renders the whole settings tree against a React-17-class
+mock (no `useSyncExternalStore`, actual component invocation) so this class of
+render-time crash fails CI instead of the user's phone.
 
 One manifest cannot serve both modern clients: Revenge's reserved dependency set
 is `revenge.api` + `discord`, Valenced's is `valenced.api` + `discord`, and in
@@ -122,7 +151,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.1.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.2.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**

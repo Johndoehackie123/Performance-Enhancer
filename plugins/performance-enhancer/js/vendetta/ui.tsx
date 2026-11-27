@@ -51,14 +51,27 @@ const PALETTE = {
 	chip: 'rgba(255,255,255,0.08)',
 }
 
-/** Subscribes the component to settings/diagnostics changes. */
+/**
+ * Subscribes the component to settings/diagnostics changes.
+ *
+ * Built on useReducer + useEffect instead of `useSyncExternalStore`: the store
+ * hook is React 18-only, and Discord's Android React renderer does not
+ * implement it — calling it throws "undefined is not a function" while the
+ * screen mounts (verified on Valenced, whose PluginSettings boundary surfaces
+ * the error). useReducer/useEffect exist since React 16.8, which every RN
+ * renderer ships.
+ */
 function useStore() {
-	return React.useSyncExternalStore(subscribe, getSettings, getSettings)
+	const [, forceUpdate] = React.useReducer((counter: number) => counter + 1, 0)
+	React.useEffect(() => subscribe(forceUpdate), [forceUpdate])
+	return getSettings()
 }
 
 /** Re-renders on diagnostics ticks only, so counters stay live while open. */
 function useDiagnostics() {
-	return React.useSyncExternalStore(subscribeDiagnostics, getDiagnostics, getDiagnostics)
+	const [, forceUpdate] = React.useReducer((counter: number) => counter + 1, 0)
+	React.useEffect(() => subscribeDiagnostics(forceUpdate), [forceUpdate])
+	return getDiagnostics()
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

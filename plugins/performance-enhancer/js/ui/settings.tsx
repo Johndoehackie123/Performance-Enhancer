@@ -6,7 +6,7 @@
  * up through its subscription, so the live preview, the JSX hooks and the
  * diagnostics panel stay in sync without a reload.
  */
-import { useSyncExternalStore } from 'react'
+import * as React from 'react'
 import type { ReactNode } from 'react'
 import { ScrollView } from 'react-native'
 import { detectDevice } from '../device'
@@ -78,7 +78,12 @@ function mergeSettings(stored: Partial<Settings> | undefined): Settings {
 
 export function SettingsComponent({ api, onVisualChange, onTrim, hooks }: SettingsProps) {
 	const stored = api.jsonStorage.use()
-	const live = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+	// useReducer+useEffect, not useSyncExternalStore: the store hook is React
+	// 18-only and Discord's Android renderer lacks it (same crash as the
+	// Valenced settings screen). React >=16.8 everywhere here.
+	const [, forceUpdate] = React.useReducer((counter: number) => counter + 1, 0)
+	React.useEffect(() => subscribe(forceUpdate), [forceUpdate])
+	const live = getSnapshot()
 	const device = detectDevice()
 	const settings = mergeSettings(stored)
 
