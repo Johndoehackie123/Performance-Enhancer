@@ -1,0 +1,76 @@
+# Regenerates index.json from the artifacts already in the pool branch and
+# commits it if it changed.
+#
+# Use it after changing how the repository is served (for example enabling
+# GitHub Pages and setting PAGES_BASE_URL), or after deleting an artifact to
+# unpublish it. Automated releases regenerate the index on their own.
+
+name: Publish repository index
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: publish-pool
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check out the published pool
+        env:
+          POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
+          POOL_DIR: published
+        run: |
+          git fetch origin "${POOL_BRANCH}"
+          git worktree add --detach "${POOL_DIR}" "origin/${POOL_BRANCH}"
+
+      - name: Regenerate index.json
+        env:
+          POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
+          POOL_DIR: published
+          PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
+        run: |
+          BASE="${PAGES_BASE_URL:-https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${POOL_BRANCH}}"
+          BASE="${BASE%/}"
+          echo "Serving the pool from ${BASE}/pool"
+          bun run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"
+
+      - name: Commit the index
+        env:
+          POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
+          POOL_DIR: published
+        run: |
+          cd "${POOL_DIR}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          if git diff --cached --quiet; then
+            echo "index.json is up to date."
+            exit 0
+          fi
+          git commit -m "Regenerate index.json"
+          git push origin HEAD:"${POOL_BRANCH}"
+
+      - name: Clean up
+        if: always()
+        env:
+          POOL_DIR: published
+        run: git worktree remove --force "${POOL_DIR}" || true
