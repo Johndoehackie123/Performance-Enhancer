@@ -88,13 +88,10 @@ jobs:
           POOL_BRANCH: ${{ vars.POOL_BRANCH || 'gh-pages' }}
           PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
         run: |
-          BASE="${{ vars.PAGES_BASE_URL }}"
-          if [ -z "$BASE" ]; then
-            OWNER="${GITHUB_REPOSITORY%%/*}"; REPO="${GITHUB_REPOSITORY#*/}"
-            OWNER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
-            BASE="https://${OWNER}.github.io"
-            if [ "$REPO" != "${OWNER}.github.io" ]; then BASE="${BASE}/${REPO}"; fi
-          fi
+          # Set PAGES_BASE_URL to a GitHub Pages URL if Pages is enabled. The
+          # default serves the same branch through raw.githubusercontent.com,
+          # which needs no Pages setup and works on every repository.
+          BASE="${PAGES_BASE_URL:-https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${POOL_BRANCH}}"
           BASE="${BASE%/}"
           echo "Serving the pool from ${BASE}/pool"
           bun run index -- --dist "${POOL_DIR}/pool" --base-url "${BASE}/pool" --out "${POOL_DIR}/index.json"

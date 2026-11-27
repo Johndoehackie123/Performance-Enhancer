@@ -19,7 +19,7 @@ cards, or a palette of your own.
 3. Add the repository URL:
 
    ```
-   https://johndoehackie123.github.io/Performance-Enhancer
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages
    ```
 
 4. Open **Browse Plugins**, install **Performance Enhancer**, then enable it.
@@ -29,6 +29,12 @@ cards, or a palette of your own.
 and use *Install from file* in the same settings screen.
 
 Every repository download is verified against the SHA-256 in `index.json`.
+
+The repository is a static `index.json` plus a `pool/` of ZIPs on the `gh-pages`
+branch. By default it is served through `raw.githubusercontent.com`; enable
+GitHub Pages for that branch and set the `PAGES_BASE_URL` Actions variable to
+switch index links to the Pages URL (`.github/workflows/publish-index.yml`
+regenerates the index).
 
 ---
 
