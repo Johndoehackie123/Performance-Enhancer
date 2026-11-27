@@ -5,7 +5,7 @@
 	"description": "RAM and SoC aware performance, memory and stability tuning, plus Material, Glassmorphism, Liquid Frost and custom visual styles.",
 	"author": "Johndoehackie123",
 	"icon": "SparklesIcon",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"dependencies": {
 		"revenge.api": {
 			"version": ">=1.2.1 <2"

@@ -171,7 +171,7 @@ export function SettingsComponent({ api, onVisualChange, onTrim, hooks }: Settin
 					/>
 					<TableSwitchRow
 						label="Collect garbage after trims"
-						subLabel="Runs the Hermes GC and, on supported builds, the native heap collector."
+						subLabel="Runs the Hermes garbage collector when the runtime exposes it."
 						value={settings.memory.aggressiveGc}
 						onValueChange={value => write('memory', { aggressiveGc: value })}
 					/>
