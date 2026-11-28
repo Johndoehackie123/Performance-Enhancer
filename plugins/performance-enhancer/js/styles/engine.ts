@@ -195,6 +195,27 @@ export function shade(hex: string, amount: number): string {
 	return `#${[r, g, b].map(c => c.toString(16).padStart(2, '0')).join('')}`
 }
 
+/** Channel-wise lerp between two hex colours. `amount` is the share of `b`. */
+export function mixColors(a: string, b: string, amount: number): string {
+	const parse = (hex: string, fallback: [number, number, number]) => {
+		const value = hex.replace('#', '').padEnd(6, '0').slice(0, 6)
+		if (!/^[0-9a-fA-F]{6}$/.test(value)) return fallback
+		return [
+			Number.parseInt(value.slice(0, 2), 16),
+			Number.parseInt(value.slice(2, 4), 16),
+			Number.parseInt(value.slice(4, 6), 16),
+		] as [number, number, number]
+	}
+	const [ra, ga, ba] = parse(a, [0, 0, 0])
+	const [rb, gb, bb] = parse(b, [0, 0, 0])
+	const p = Math.min(1, Math.max(0, amount))
+	const mix = (x: number, y: number) => Math.round(x + (y - x) * p)
+	const r = mix(ra, rb)
+	const g = mix(ga, gb)
+	const b2 = mix(ba, bb)
+	return `#${[r, g, b2].map(c => c.toString(16).padStart(2, '0')).join('')}`
+}
+
 export interface TonalScale {
 	base: string
 	lowest: string
@@ -209,21 +230,67 @@ export interface TonalScale {
 	accentTintStrong: string
 }
 
+export interface TonalOptions {
+	/** Stronger de-emphasised text, for busy backdrops. */
+	highContrast?: boolean
+	/** Material 3 style tonal elevation: raised tiers take on the accent hue. */
+	tonal?: boolean
+}
+
 /** Derives a coherent tonal scale from the panel & accent colours. */
-export function buildTonalScale(panel: string, accent: string, text: string): TonalScale {
+export function buildTonalScale(
+	panel: string,
+	accent: string,
+	text: string,
+	options: TonalOptions = {},
+): TonalScale {
 	const dark = isDarkColor(panel)
+	const { highContrast = false, tonal = false } = options
+	// Material 3 elevation ladder: raised tiers are tinted toward the primary
+	// at increasing opacity (5% / 8% / 11% ≈ tones L1/L2/L3), not just lightened.
+	const raised = (lift: number, accentShare: number) =>
+		tonal ? mixColors(panel, accent, accentShare) : shade(panel, dark ? lift : lift / 2)
 	return {
 		base: shade(panel, dark ? -6 : -3),
 		lowest: shade(panel, dark ? -18 : -7),
-		hover: shade(panel, dark ? 10 : 5),
-		elevated: shade(panel, dark ? 14 : 6),
+		hover: raised(10, 0.12),
+		elevated: raised(14, 0.09),
 		lowestDeep: shade(panel, dark ? -32 : -12),
 		text,
-		muted: withAlpha(text, 0.64),
+		muted: withAlpha(text, highContrast ? 0.78 : 0.64),
 		accent,
 		accentSoft: shade(accent, dark ? -22 : -12),
 		accentTint: withAlpha(accent, 0.16),
 		accentTintStrong: withAlpha(accent, 0.5),
+	}
+}
+
+interface ShadowSpec {
+	color: string
+	opacity: number
+	radius: number
+	offsetY: number
+	elevation: number
+}
+
+/**
+ * Scales a shadow by the user's elevation control.
+ *
+ * `elevation` 0 removes the shadow entirely (flat / low-power look), 50 keeps
+ * the preset value and 100 roughly doubles the opacity and height.
+ */
+export function scaleShadow<T extends ShadowSpec | undefined>(shadow: T, elevation: number): T {
+	if (!shadow) return shadow
+	const strength = Math.min(100, Math.max(0, elevation)) / 50
+	if (strength <= 0) return undefined as T
+	const clamp = (value: number, min: number, max: number) =>
+		Math.min(max, Math.max(min, value))
+	return {
+		...shadow,
+		opacity: clamp(shadow.opacity * strength, 0, 0.85),
+		radius: Math.round(shadow.radius * (0.55 + 0.45 * strength)),
+		offsetY: Math.round(shadow.offsetY * strength),
+		elevation: Math.round(shadow.elevation * strength),
 	}
 }
 
@@ -404,11 +471,26 @@ const OFF_TOKENS: StyleTokens = {
 function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 	if (visual.style === 'off') return OFF_TOKENS
 
-	const { panel, accent, text } = panelFor(visual)
+	const base = panelFor(visual)
 	const custom = visual.custom
+	// "Saturate highlights": tint the custom panel toward the accent hue
+	// instead of leaving it neutral, per the glassmorphism saturate() guidance.
+	const panel =
+		visual.style === 'custom' && custom.saturate
+			? mixColors(base.panel, base.accent, 0.18)
+			: base.panel
+	const accent = base.accent
+	const text = visual.contrast
+		? isDarkColor(panel)
+			? '#ffffff'
+			: '#000000'
+		: base.text
 	const radius = visual.style === 'custom' ? custom.radius : visual.style === 'card' ? 18 : 14
 	const media = withAlpha(panel, 0.75)
-	const scale = buildTonalScale(panel, accent, text)
+	const scale = buildTonalScale(panel, accent, text, {
+		highContrast: visual.contrast,
+		tonal: visual.style === 'material',
+	})
 
 	switch (visual.style) {
 		case 'material':
@@ -418,13 +500,16 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 				borderColor: withAlpha('#938f99', 0.24),
 				borderWidth: 1,
 				radius,
-				shadow: {
-					color: '#000000',
-					opacity: 0.28,
-					radius: 10,
-					offsetY: 4,
-					elevation: tier === 'low' ? 0 : 4,
-				},
+				shadow: scaleShadow(
+					{
+						color: '#000000',
+						opacity: 0.28,
+						radius: 10,
+						offsetY: 4,
+						elevation: tier === 'low' ? 0 : 4,
+					},
+					visual.elevation,
+				),
 				blur: 0,
 				accent,
 				media,
@@ -436,13 +521,16 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 				borderColor: isDarkColor(panel) ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)',
 				borderWidth: 1,
 				radius: radius + 2,
-				shadow: {
-					color: '#000000',
-					opacity: 0.18,
-					radius: 16,
-					offsetY: 6,
-					elevation: tier === 'low' ? 0 : 6,
-				},
+				shadow: scaleShadow(
+					{
+						color: '#000000',
+						opacity: 0.18,
+						radius: 16,
+						offsetY: 6,
+						elevation: tier === 'low' ? 0 : 6,
+					},
+					visual.elevation,
+				),
 				blur: blurFor(visual.glass, tier),
 				accent,
 				media,
@@ -454,13 +542,16 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 				borderColor: isDarkColor(panel) ? 'rgba(255,255,255,0.34)' : 'rgba(0,0,0,0.16)',
 				borderWidth: 1,
 				radius: radius + 4,
-				shadow: {
-					color: '#0b1020',
-					opacity: 0.24,
-					radius: 26,
-					offsetY: 10,
-					elevation: tier === 'low' ? 0 : 8,
-				},
+				shadow: scaleShadow(
+					{
+						color: '#0b1020',
+						opacity: 0.24,
+						radius: 26,
+						offsetY: 10,
+						elevation: tier === 'low' ? 0 : 8,
+					},
+					visual.elevation,
+				),
 				blur: blurFor('heavy', tier),
 				accent,
 				media,
@@ -472,13 +563,16 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 				borderColor: withAlpha(text, 0.12),
 				borderWidth: 1,
 				radius,
-				shadow: {
-					color: '#000000',
-					opacity: 0.12,
-					radius: 6,
-					offsetY: 2,
-					elevation: tier === 'low' ? 0 : 2,
-				},
+				shadow: scaleShadow(
+					{
+						color: '#000000',
+						opacity: 0.12,
+						radius: 6,
+						offsetY: 2,
+						elevation: tier === 'low' ? 0 : 2,
+					},
+					visual.elevation,
+				),
 				blur: 0,
 				accent,
 				media,
@@ -492,13 +586,16 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 				radius,
 				shadow:
 					custom.transparency > 0.15
-						? {
-								color: '#000000',
-								opacity: 0.22,
-								radius: 18,
-								offsetY: 6,
-								elevation: tier === 'low' ? 0 : 6,
-							}
+						? scaleShadow(
+								{
+									color: '#000000',
+									opacity: 0.22,
+									radius: 18,
+									offsetY: 6,
+									elevation: tier === 'low' ? 0 : 6,
+								},
+								visual.elevation,
+							)
 						: undefined,
 				blur: tier === 'low' ? 0 : Math.round(custom.transparency * 24),
 				accent,
@@ -563,6 +660,16 @@ export function buildMediaStyle(tokens: StyleTokens) {
 
 /** Round avatar style, used when `roundAvatars` is enabled. */
 export const ROUND_AVATAR_STYLE = { borderRadius: 9999 }
+
+/** Avatar style with an optional accent ring, tinted from the live accent. */
+export function buildAvatarStyle(accent: string, ring: boolean) {
+	if (!ring) return ROUND_AVATAR_STYLE
+	return {
+		borderRadius: 9999,
+		borderWidth: 1.5,
+		borderColor: accent,
+	}
+}
 
 /** A compact description used by the settings preview card. */
 export function describeStyle(visual: VisualSettings): string {

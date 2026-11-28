@@ -26,11 +26,11 @@
  */
 import { apiOrNull, jsxRuntime } from './bridge'
 import {
+	buildAvatarStyle,
 	buildMediaStyle,
 	buildPanelStyle,
 	buildRecolorTable,
 	recolorStyleValue,
-	ROUND_AVATAR_STYLE,
 } from '../styles/engine'
 import type { StyleTokens } from '../styles/engine'
 import type { SurfaceId } from '../shared'
@@ -40,6 +40,8 @@ export interface StyleOptions {
 	getTokens(): StyleTokens | undefined
 	enabledSurfaces(): SurfaceId[]
 	roundAvatars(): boolean
+	/** Accent ring around circular avatars. */
+	avatarRing?(): boolean
 	onHooked(count: number, missing: number): void
 	logger: Logger
 }
@@ -90,7 +92,6 @@ function mergeStyle(existing: unknown, overlay: Record<string, unknown>) {
 
 export function installStyles(options: StyleOptions): StyleHandle {
 	let hooked = 0
-	let reported = -1
 
 	// Memoised recolor state. `getTokens()` is memoised in the engine, so the
 	// same visual yields the same tokens object and this compare is a pointer
@@ -128,16 +129,23 @@ export function installStyles(options: StyleOptions): StyleHandle {
 		return cachedTable
 	}
 
-	const reportHooked = () => {
-		// Throttle diagnostics updates: at most one per 64 decorated elements,
-		// plus whenever the delta crosses a boundary on dispose.
-		if (hooked - reported >= 64) {
-			reported = hooked
-			try {
-				options.onHooked(hooked, 0)
-			} catch {}
-		}
-	}
+	// Diagnostics are reported from a slow timer, never from the render path.
+	// Reporting synchronously feeds the settings screen's diagnostics
+	// subscription: re-render -> re-decorate -> report -> re-render, which
+	// freezes the page. Five seconds keeps the counter honest without the
+	// screen ever spinning on it.
+	let lastReported = 0
+	const timer = setInterval(() => {
+		if (hooked === lastReported) return
+		lastReported = hooked
+		try {
+			options.onHooked(hooked, 0)
+		} catch {}
+	}, 5000)
+	try {
+		// Hermes timers support unref; a missing unref must not break install.
+		;(timer as unknown as { unref?: () => void }).unref?.()
+	} catch {}
 
 	/** Returns the replacement props, or `undefined` to leave the element alone. */
 	const decorate = (type: any, props: any) => {
@@ -161,7 +169,8 @@ export function installStyles(options: StyleOptions): StyleHandle {
 		// 2. Avatar rounding (independent of the style).
 		const typeName = nameOf(type)
 		if (options.roundAvatars() && AVATAR_HINTS.some(hint => typeName.includes(hint))) {
-			next = mergeStyle(next, ROUND_AVATAR_STYLE)
+			const accent = tokens?.accent ?? '#5865f2'
+			next = mergeStyle(next, buildAvatarStyle(accent, options.avatarRing?.() ?? false))
 			changed = true
 		} else if (tokens) {
 			// 3. Surface overlays for the enabled surfaces only.
@@ -179,7 +188,6 @@ export function installStyles(options: StyleOptions): StyleHandle {
 
 		if (!changed) return undefined
 		hooked += 1
-		reportHooked()
 		return { ...props, style: next }
 	}
 
@@ -244,6 +252,7 @@ export function installStyles(options: StyleOptions): StyleHandle {
 		},
 		missing: 0,
 		dispose() {
+			clearInterval(timer)
 			for (const dispose of disposers.splice(0)) {
 				try {
 					dispose()
