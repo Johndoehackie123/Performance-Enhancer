@@ -59,6 +59,15 @@ export interface StyleTokens {
 	accentTint: string
 	/** Strong-alpha accent, for on-track switches. */
 	accentTintStrong: string
+	/* --- Layout language of the active theme (internal-only effects) --- */
+	/** Vertical padding added inside styled surfaces. */
+	paddingV: number
+	/** Horizontal padding added inside styled surfaces. */
+	paddingH: number
+	/** Corner radius applied to avatar containers (9999 = circle). */
+	avatarRadius: number
+	/** Letter tracking applied to text (0 = Discord default). */
+	letterSpacing: number
 }
 
 export interface StylePresetMeta {
@@ -162,6 +171,9 @@ export const SURFACE_COMPONENT_HINTS: Record<SurfaceId, string[]> = {
 	images: ['MediaItem', 'EmbedImage', 'AttachmentImage', 'MessageImage'],
 }
 
+/** Names Discord's text components typically carry, for the modern runtime. */
+export const TEXT_COMPONENT_HINTS = ['Text'] as const
+
 export const AVATAR_COMPONENT_HINTS = ['Avatar', 'UserAvatar', 'RoundAvatar']
 
 export function isDarkColor(hex: string): boolean {
@@ -214,6 +226,33 @@ export function mixColors(a: string, b: string, amount: number): string {
 	const g = mix(ga, gb)
 	const b2 = mix(ba, bb)
 	return `#${[r, g, b2].map(c => c.toString(16).padStart(2, '0')).join('')}`
+}
+
+/**
+ * The layout language of each theme: corner family, inset spacing, avatar
+ * geometry and text tracking.
+ *
+ * Only internal, non-flexing properties are ever applied (padding on styled
+ * surfaces, avatar corner radius, letter tracking), so a theme can never
+ * break scrolling, insets or flex flow. Layout mirrors the source design
+ * languages: Material 3's shape scale, glassmorphism's panes, Liquid Glass's
+ * detached capsules and visionOS spacing, and the tighter soft-card grid.
+ */
+export const THEME_LAYOUTS: Record<
+	StyleId,
+	{ paddingV: number; paddingH: number; avatarRadius: number; letterSpacing: number }
+> = {
+	off: { paddingV: 0, paddingH: 0, avatarRadius: 9999, letterSpacing: 0 },
+	// M3 shape scale: medium 12dp containers, comfortable tap density.
+	material: { paddingV: 4, paddingH: 10, avatarRadius: 9999, letterSpacing: 0 },
+	// Glassmorphism: generous insets, never-cramped panes.
+	glass: { paddingV: 7, paddingH: 13, avatarRadius: 9999, letterSpacing: 0.1 },
+	// Liquid Glass (iOS 26): detached breathing room, softly wide tracking.
+	frost: { paddingV: 9, paddingH: 15, avatarRadius: 9999, letterSpacing: 0.3 },
+	// Soft cards: chunky card padding; squircle avatars echo the geometry.
+	card: { paddingV: 9, paddingH: 13, avatarRadius: 11, letterSpacing: 0.1 },
+	// Custom: user-shaped radius, neutral spacing.
+	custom: { paddingV: 7, paddingH: 12, avatarRadius: 9999, letterSpacing: 0 },
 }
 
 export interface TonalScale {
@@ -465,6 +504,10 @@ const OFF_TOKENS: StyleTokens = {
 	accentSoft: '#4752c4',
 	accentTint: 'rgba(88,101,242,0.16)',
 	accentTintStrong: 'rgba(88,101,242,0.5)',
+	paddingV: 0,
+	paddingH: 0,
+	avatarRadius: 9999,
+	letterSpacing: 0,
 }
 
 /** Builds the style tokens for a visual configuration. Pure and cheap. */
@@ -485,17 +528,20 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 			? '#ffffff'
 			: '#000000'
 		: base.text
-	const radius = visual.style === 'custom' ? custom.radius : visual.style === 'card' ? 18 : 14
+	const radius =
+		visual.style === 'custom' ? custom.radius : visual.style === 'card' ? 18 : visual.style === 'frost' ? 22 : visual.style === 'glass' ? 18 : visual.style === 'material' ? 16 : 14
 	const media = withAlpha(panel, 0.75)
 	const scale = buildTonalScale(panel, accent, text, {
 		highContrast: visual.contrast,
 		tonal: visual.style === 'material',
 	})
+	const layout = visual.themeLayout !== false ? THEME_LAYOUTS[visual.style] : THEME_LAYOUTS.off
 
 	switch (visual.style) {
 		case 'material':
 			return {
 				...scale,
+				...layout,
 				background: withAlpha(panel, 0.96),
 				borderColor: withAlpha('#938f99', 0.24),
 				borderWidth: 1,
@@ -517,10 +563,11 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 		case 'glass':
 			return {
 				...scale,
+				...layout,
 				background: withAlpha(panel, glassAlpha(visual.glass)),
 				borderColor: isDarkColor(panel) ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)',
 				borderWidth: 1,
-				radius: radius + 2,
+				radius,
 				shadow: scaleShadow(
 					{
 						color: '#000000',
@@ -538,10 +585,11 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 		case 'frost':
 			return {
 				...scale,
+				...layout,
 				background: withAlpha(panel, glassAlpha(visual.glass) * 0.86),
 				borderColor: isDarkColor(panel) ? 'rgba(255,255,255,0.34)' : 'rgba(0,0,0,0.16)',
 				borderWidth: 1,
-				radius: radius + 4,
+				radius,
 				shadow: scaleShadow(
 					{
 						color: '#0b1020',
@@ -559,6 +607,7 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 		case 'card':
 			return {
 				...scale,
+				...layout,
 				background: withAlpha(panel, 0.88),
 				borderColor: withAlpha(text, 0.12),
 				borderWidth: 1,
@@ -580,6 +629,7 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 		case 'custom':
 			return {
 				...scale,
+				...layout,
 				background: withAlpha(panel, 1 - custom.transparency),
 				borderColor: withAlpha(accent, 0.35),
 				borderWidth: custom.border,
@@ -634,6 +684,8 @@ export function buildPanelStyle(tokens: StyleTokens) {
 		borderRadius: tokens.radius,
 		borderWidth: tokens.borderWidth,
 		borderColor: tokens.borderColor,
+		...(tokens.paddingV > 0 ? { paddingVertical: tokens.paddingV } : {}),
+		...(tokens.paddingH > 0 ? { paddingHorizontal: tokens.paddingH } : {}),
 		...(tokens.shadow
 			? {
 					elevation: tokens.shadow.elevation,
@@ -662,10 +714,11 @@ export function buildMediaStyle(tokens: StyleTokens) {
 export const ROUND_AVATAR_STYLE = { borderRadius: 9999 }
 
 /** Avatar style with an optional accent ring, tinted from the live accent. */
-export function buildAvatarStyle(accent: string, ring: boolean) {
-	if (!ring) return ROUND_AVATAR_STYLE
+export function buildAvatarStyle(accent: string, ring: boolean, avatarRadius = 9999) {
+	const radius = avatarRadius > 0 ? avatarRadius : 9999
+	if (!ring) return { borderRadius: radius }
 	return {
-		borderRadius: 9999,
+		borderRadius: radius,
 		borderWidth: 1.5,
 		borderColor: accent,
 	}

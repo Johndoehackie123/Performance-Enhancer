@@ -19,6 +19,8 @@ import {
 	AVATAR_COMPONENT_HINTS,
 	ROUND_AVATAR_STYLE,
 	SURFACE_COMPONENT_HINTS,
+	TEXT_COMPONENT_HINTS,
+	buildAvatarStyle,
 	buildMediaStyle,
 	buildPanelStyle,
 	buildRecolorTable,
@@ -225,6 +227,30 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 		if (!perSurface.has(surface)) missing.push(surface)
 	}
 
+	// Text tracking is independent of the surfaces the user enabled; it applies
+	// to the app's text components when the active theme asks for tracking.
+	{
+		const textHints = new Map<string, SurfaceId>(TEXT_COMPONENT_HINTS.map(hint => [hint, 'messages' as SurfaceId]))
+		let textHooks = 0
+		for (const { name, component } of discoverComponents(textHints, 400)) {
+			// Cap high-frequency text patches, like the surface hooks.
+			if (textHooks >= 2) break
+			const unpatch = hookComponent(
+				component,
+				() => {
+					const tokens = options.getTokens()
+					return tokens && tokens.letterSpacing > 0 ? { letterSpacing: tokens.letterSpacing } : undefined
+				},
+				options.onError,
+				options.getTokens,
+			)
+			if (!unpatch) continue
+			textHooks++
+			cleanups.push(unpatch)
+			hooked.push({ surface: 'messages', name: `text:${name}` })
+		}
+	}
+
 	// Avatars are independent of the surfaces the user enabled.
 	if (options.roundAvatars()) {
 		const avatarHints = new Map<string, SurfaceId>(
@@ -233,7 +259,12 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 		for (const { name, component } of discoverComponents(avatarHints, 400)) {
 			const unpatch = hookComponent(
 				component,
-				() => ROUND_AVATAR_STYLE,
+				() => {
+					const tokens = options.getTokens()
+					return tokens
+						? buildAvatarStyle(tokens.accent, true, tokens.avatarRadius)
+						: ROUND_AVATAR_STYLE
+				},
 				options.onError,
 				options.getTokens,
 			)

@@ -15,7 +15,34 @@ render path, and the counter still shows live-ish under *Elements restyled*.
 1.3.1 also adds the Appearance controls (elevation scale, high-contrast text,
 themed avatar ring), real Material 3 tonal elevation for raised tiers, the
 accent-tinted *Saturate highlights* wiring, and themed icons in the style
-picker. The 1.3.0 mechanisms are otherwise unchanged:
+picker.
+
+**1.4.0** gives every theme its own **layout language**, on top of the colour
+language. React Native draws Discord on a flex tree, so no theme can safely
+resize windows or rails; instead each style re-shapes the parts that are pure
+style, and those now re-shape on every surface at once:
+
+- a per-theme corner radius for raised panels (Material 3's 16 dp shape scale,
+  glassmorphism's 18, Liquid Glass's detached 22, soft cards' chunky 18),
+- internal pane padding per theme (M3's comfortable tap density through
+  Liquid Glass's floating-island breathing room),
+- avatar geometry per theme (soft cards switch avatars to squircle corners;
+  everything else keeps circles),
+- per-theme letter tracking on text (glass +0.1, Liquid Frost +0.3),
+- the whole layout follows the Themes-style switch live, and can be turned off
+  with the new *Theme layouts* toggle under Appearance, which falls back to
+  Discord's stock spacing while keeping the colours.
+
+Layout research that shaped these values: Material 3's shape scale (medium =
+12 dp, large = 16 dp containers) and tonal elevation; glassmorphism's 8–15 px
+blur with low-opacity panes sized generously; Apple's Liquid Glass (iOS 26),
+where floating capsules and grouped glass need more breathing room and wider,
+softer text; and Discord's own layout (72 px server rail / 240 px channel
+sidebar / 240 px member list on desktop, bottom tab bar on mobile), which
+stays untouched because resizing it would break navigation — the recolor and
+the layout language only touch declarative style props (radius, padding,
+tracking, avatar geometry), never flexing containers. The 1.3.1 mechanisms are
+otherwise unchanged:
 
 1. **Structural recolor layer.** The JSX hook now walks every element's `style`
    prop and substitutes Discord's stock palette (modern *and* legacy) for a
@@ -213,7 +240,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.3.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.4.0.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**

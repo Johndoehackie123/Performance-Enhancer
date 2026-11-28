@@ -580,6 +580,14 @@ export function SettingsScreen(_props?: unknown) {
 
 			{settings.visual.style !== 'off' ? (
 				<Section title="Appearance">
+					<Switch
+						label="Theme layouts"
+						subLabel="Each style also re-shapes spacing, avatar geometry and text tracking to match its design language."
+						value={settings.visual.themeLayout}
+						onValueChange={themeLayout =>
+							patch({ visual: { ...settings.visual, themeLayout } })
+						}
+					/>
 					<Stepper
 						label="Elevation"
 						value={settings.visual.elevation}

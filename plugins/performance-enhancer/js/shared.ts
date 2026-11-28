@@ -50,6 +50,8 @@ export interface VisualSettings {
 	contrast: boolean
 	/** Draws an accent ring around circular avatars. */
 	avatarRing: boolean
+	/** Each theme also re-shapes the app (padding, avatar geometry, tracking). */
+	themeLayout: boolean
 }
 
 export interface PerformanceSettings {
@@ -142,6 +144,7 @@ export const DEFAULT_SETTINGS: Settings = {
 		elevation: 50,
 		contrast: false,
 		avatarRing: false,
+		themeLayout: true,
 	},
 }
 
