@@ -586,18 +586,19 @@ export function navigationKind(
 	const role = props?.accessibilityRole
 	const state = props?.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
 	const selected = !!state && (state.selected === true || state.checked === true)
-	// Tab items first: explicit tab role, *Item names in a nav context, or a
-	// selected element whose name mentions tabs. Host touchables carrying a
-	// selected state are almost always tab-like controls too — give them the
-	// capsule; the worst case is an accent pill on a pressed control.
+	// Tab items first: explicit tab role, the react-navigation `focused`
+	// boolean, *Item names in a nav context, or a selected element whose name
+	// mentions tabs. Host touchables outside the tab bar are deliberately not
+	// treated as items — the bar subtree remix handles them in scope.
 	if (role === 'tab') return 'item'
+	if (typeof props?.focused === 'boolean') return 'item'
 	if (/item/i.test(t) && /tab|navigation|nav/i.test(t)) return 'item'
 	if (selected && /tab/i.test(t)) return 'item'
-	if (selected && /^(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|Touchable)/.test(t)) return 'item'
 	// The bar itself: container names and navigator props.
 	if (/tabbar|bottomtab|navigationbar|navigatorheader|maintabbar|toptabs/i.test(t)) return 'bar'
 	if (props) {
-		if (['tabBar', 'bottomTabBar', 'focused'].some(key => key in props)) return 'bar'
+		if (['tabBar', 'bottomTabBar'].some(key => key in props)) return 'bar'
+		if (['activeTintColor', 'inactiveTintColor', 'tabBarActiveTintColor', 'tabBarInactiveTintColor', 'keyboardHidesTabBar'].some(key => key in props)) return 'bar'
 		if ('header' in props && /nav/i.test(t)) return 'bar'
 		if ('tabIndex' in props) return 'bar'
 	}

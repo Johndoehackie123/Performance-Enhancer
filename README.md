@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.1.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.2.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
@@ -152,7 +152,9 @@ Details:
   **Tonal Pill** (M3 edge bar, filled tonal active indicator), **Floating
   Island** (detached Liquid Glass capsule), **Glass Dock** (translucent iOS
   dock), **Card Bar** (chunky card container) and **Minimal Line** (hairline
-  edge bar with accent tint). Tune the active capsule with
+  edge bar with accent tint). Since 1.5.2 the whole bar is remixed atomically
+  (container + items, scoped to the bar) — capsules never land on ordinary
+  buttons. Tune the active capsule with
   **Active pill strength** and the floating bars with **Bar corner radius**
   (0–32). Active tabs are detected through RN accessibility state; the bar's
   flex tree, insets and structure are never touched.

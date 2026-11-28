@@ -29,6 +29,7 @@ import {
 	buildRecolorTable,
 	recolorStyleValue,
 } from './engine'
+import { remixNavigationChildren } from './navigation-remix'
 import type { StyleTokens } from './engine'
 import type { SurfaceId } from '../shared'
 import type { ReactElement } from 'react'
@@ -131,6 +132,7 @@ function decorate(
 	element: ReactElement<any>,
 	overlays: unknown[],
 	getTokens?: () => StyleTokens | undefined,
+	children?: unknown,
 ): ReactElement<any> {
 	if (!isValidElement(element)) return element
 	const props = element.props as Record<string, unknown> | null
@@ -148,6 +150,7 @@ function decorate(
 	// Later entries win in React Native, so our overlays are applied after the
 	// element's own style.
 	next.style = overlays.length ? [recolored, ...overlays] : recolored
+	if (children !== undefined) next.children = children
 	return createElement(element.type as any, next as any)
 }
 
@@ -179,13 +182,22 @@ function hookComponent(
 	componentName: string,
 	onError?: (error: unknown) => void,
 	getTokens?: () => StyleTokens | undefined,
+	remix?: (element: ReactElement<any>) => unknown,
 ): (() => void) | undefined {
 	try {
 		return afterJSX(component as any, element => {
 			try {
-				const props = (element as ReactElement<any>)?.props
-				const overlays = props ? buildOverlays(element as ReactElement<any>, componentName) : []
-				return decorate(element as ReactElement<any>, overlays, getTokens)
+				const typed = element as ReactElement<any>
+				const props = typed?.props
+				const overlays = props ? buildOverlays(typed, componentName) : []
+				let children: unknown
+				if (remix && props) {
+					try {
+						const remixed = remix(typed)
+						if (remixed !== props.children) children = remixed
+					} catch {}
+				}
+				return decorate(typed, overlays, getTokens, children)
 			} catch (error) {
 				onError?.(error)
 				return element
@@ -243,7 +255,22 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 			return panel ? [panel] : []
 		}
 
-		const unpatch = hookComponent(entry.component, overlaysFor, entry.name, options.onError, options.getTokens)
+		const navKind =
+			entry.surface === 'navigation'
+				? navigationKind(entry.name, undefined)
+				: undefined
+		const remix =
+			navKind === 'bar'
+				? (element: ReactElement<any>) => {
+						const tokens = options.getTokens()
+						if (!tokens) return element.props?.children
+						return remixNavigationChildren(element.props?.children, tokens, {
+							createElement,
+							isValidElement,
+						})
+					}
+				: undefined
+		const unpatch = hookComponent(entry.component, overlaysFor, entry.name, options.onError, options.getTokens, remix)
 		if (!unpatch) continue
 		perSurface.set(entry.surface, count + 1)
 		cleanups.push(unpatch)
