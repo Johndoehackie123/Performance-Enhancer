@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.3.1.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.4.0.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
@@ -138,6 +138,14 @@ Details:
   (tinted toward the accent, per Material 3), not just lighter greys; the
   custom style's *Saturate highlights* tints panels and the accent family
   toward your accent hue.
+- **Theme layouts**: every style also re-shapes the app, not just its colours.
+  Corner radius, pane padding, avatar geometry and text tracking adapt per
+  theme (Material 3's 16 dp shape scale and comfortable density, glassmorphism's
+  roomier panes, Liquid Glass's detached 22 px radius and wide tracking, soft
+  cards' chunky cards with squircle avatars). Discord's own layout — the
+  72 px rail, 240 px sidebars and the mobile bottom tab bar — stays untouched.
+  Flip it off with **Theme layouts** under Appearance to keep the colours with
+  Discord's stock spacing.
 - **Register colour themes** adds all five palettes (Material, Glassmorphism,
   Liquid Frost, Soft Cards and your custom palette) to
   **Settings → Revenge → Themes**, with a light base generated from your panel

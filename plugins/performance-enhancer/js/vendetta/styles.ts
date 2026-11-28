@@ -170,9 +170,19 @@ export function installStyles(options: StyleOptions): StyleHandle {
 		const typeName = nameOf(type)
 		if (options.roundAvatars() && AVATAR_HINTS.some(hint => typeName.includes(hint))) {
 			const accent = tokens?.accent ?? '#5865f2'
-			next = mergeStyle(next, buildAvatarStyle(accent, options.avatarRing?.() ?? false))
+			next = mergeStyle(
+				next,
+				buildAvatarStyle(accent, options.avatarRing?.() ?? false, tokens?.avatarRadius),
+			)
 			changed = true
-		} else if (tokens) {
+		}
+		// 2b. Text tracking from the theme's layout language. Host `Text`
+		// components are identified by their exact string type.
+		if (tokens && tokens.letterSpacing > 0 && type === 'Text') {
+			next = mergeStyle(next, { letterSpacing: tokens.letterSpacing })
+			changed = true
+		}
+		if (tokens) {
 			// 3. Surface overlays for the enabled surfaces only.
 			const surface = surfaceOf(props, typeName, enabledNow())
 			const base = surface
