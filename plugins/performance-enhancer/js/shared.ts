@@ -14,6 +14,16 @@ export type StyleId = 'off' | 'material' | 'glass' | 'frost' | 'card' | 'custom'
 /** UI surfaces a style is allowed to affect. */
 export type SurfaceId = 'messages' | 'navigation' | 'input' | 'sheets' | 'images'
 
+/** Bottom-navigation treatment. 'auto' follows the active visual theme. */
+export type NavigationStyleId =
+	| 'auto'
+	| 'default'
+	| 'tonal'
+	| 'island'
+	| 'dock'
+	| 'card'
+	| 'minimal'
+
 /** Glass morphism intensity presets. */
 export type GlassPreset = 'light' | 'medium' | 'heavy'
 
@@ -52,6 +62,16 @@ export interface VisualSettings {
 	avatarRing: boolean
 	/** Each theme also re-shapes the app (padding, avatar geometry, tracking). */
 	themeLayout: boolean
+	/** Bottom navigation treatment; 'auto' follows the active theme. */
+	navigation: NavigationStyleId
+	/** Opacity of the active tab capsule, 0–100. */
+	pillStrength: number
+	/** Corner radius of floating navigation bars, 0–32. */
+	navRadius: number
+	/** Skips shadow/elevation work on styled surfaces (low-end GPUs). */
+	reduceEffects: boolean
+	/** Draws translucent fills solid for readability and GPU savings. */
+	reduceTransparency: boolean
 }
 
 export interface PerformanceSettings {
@@ -145,6 +165,11 @@ export const DEFAULT_SETTINGS: Settings = {
 		contrast: false,
 		avatarRing: false,
 		themeLayout: true,
+		navigation: 'auto',
+		pillStrength: 60,
+		navRadius: 24,
+		reduceEffects: false,
+		reduceTransparency: false,
 	},
 }
 
@@ -197,6 +222,8 @@ export function resolveSettings(
 	)
 	merged.visual.custom.border = clampNumber(merged.visual.custom.border, 0, 4, 1)
 	merged.visual.elevation = clampNumber(merged.visual.elevation, 0, 100, 50)
+	merged.visual.navRadius = clampInt(merged.visual.navRadius, 0, 32, 24)
+	merged.visual.pillStrength = clampInt(merged.visual.pillStrength, 0, 100, 60)
 	return merged
 }
 

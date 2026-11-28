@@ -17,11 +17,12 @@ import {
 	DEFAULT_SETTINGS,
 	cloneSettings,
 	type GlassPreset,
+	type NavigationStyleId,
 	type ProfileId,
 	type Settings,
 	type StyleId,
 } from '../shared'
-import { buildTokens, GLASS_PRESETS, STYLE_PRESETS, SURFACES } from '../styles/engine'
+import { buildTokens, GLASS_PRESETS, NAVIGATION_STYLES, STYLE_PRESETS, SURFACES } from '../styles/engine'
 import type { StyleTokens } from '../styles/engine'
 import { capabilities, design, reactNative, toast } from './bridge'
 import { detectDevice } from './device'
@@ -52,6 +53,16 @@ const STYLE_CAPTIONS: Record<StyleId, string> = {
 	frost: 'Liquid frost · milky film',
 	card: 'Low-contrast soft cards',
 	custom: 'Your palette & shape',
+}
+
+const NAV_CAPTIONS: Record<NavigationStyleId, string> = {
+	auto: 'Follows the active theme',
+	default: 'Stock bottom tab bar',
+	tonal: 'M3 tonal active pill',
+	island: 'Detached glass capsule',
+	dock: 'Translucent iOS dock',
+	card: 'Chunky card container',
+	minimal: 'Hairline edge bar',
 }
 
 const PALETTE = {
@@ -618,6 +629,58 @@ export function SettingsScreen(_props?: unknown) {
 				</Section>
 			) : null}
 
+			<Section title="Navigation">
+				<NavigationPicker
+					value={settings.visual.navigation}
+					onChange={navigation => {
+						const preset = NAVIGATION_STYLES.find(entry => entry.id === navigation)
+						patch({ visual: { ...settings.visual, navigation } })
+						toast(`${preset?.label ?? 'Navigation'} applied`)
+					}}
+				/>
+				<Stepper
+					label="Active pill strength"
+					value={settings.visual.pillStrength}
+					unit="%"
+					step={10}
+					min={0}
+					max={100}
+					onChange={pillStrength =>
+						patch({ visual: { ...settings.visual, pillStrength } })
+					}
+				/>
+				<Stepper
+					label="Bar corner radius"
+					value={settings.visual.navRadius}
+					unit="px"
+					step={2}
+					min={0}
+					max={32}
+					onChange={navRadius =>
+						patch({ visual: { ...settings.visual, navRadius } })
+					}
+				/>
+			</Section>
+
+			<Section title="Rendering">
+				<Switch
+					label="Reduce visual effects"
+					subLabel="Skips shadows and elevation on styled surfaces. Best for low-end GPUs and battery life."
+					value={settings.visual.reduceEffects}
+					onValueChange={reduceEffects =>
+						patch({ visual: { ...settings.visual, reduceEffects } })
+					}
+				/>
+				<Switch
+					label="Reduce transparency"
+					subLabel="Draws translucent glass fills solid for readability and GPU savings."
+					value={settings.visual.reduceTransparency}
+					onValueChange={reduceTransparency =>
+						patch({ visual: { ...settings.visual, reduceTransparency } })
+					}
+				/>
+			</Section>
+
 			{settings.visual.style !== 'off' ? (
 				<Section title="Live preview">
 					<PalettePreview settings={settings} />
@@ -959,6 +1022,263 @@ function StyleIcon({ style, active, tokens }: { style: StyleId; active: boolean;
 				</View>
 			)
 	}
+}
+
+/** Glyph for each navigation style, in the same visual language as the style picker. */
+function NavigationIcon({
+	navigation,
+	active,
+	tokens,
+}: {
+	navigation: NavigationStyleId
+	active: boolean
+	tokens: StyleTokens
+}) {
+	const accent = tokens.accent
+	const fade = (alpha: number) => `${accent}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`
+	const glyph = active ? accent : PALETTE.label
+	const fill = active ? fade(0.32) : PALETTE.chip
+	const edge = active ? accent : PALETTE.border
+
+	switch (navigation) {
+		case 'auto':
+			// A sparkle: four-point star on a dot.
+			return (
+				<View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+					<View
+						style={{
+							width: 13,
+							height: 13,
+							borderRadius: 3,
+							backgroundColor: glyph,
+							transform: [{ rotate: '45deg' }],
+						}}
+					/>
+					<View
+						style={{
+							position: 'absolute',
+							right: 4,
+							top: 4,
+							width: 5,
+							height: 5,
+							borderRadius: 2.5,
+							backgroundColor: glyph,
+							opacity: 0.75,
+						}}
+					/>
+				</View>
+			)
+		case 'default':
+			// Discord's stock edge bar with four plain items.
+			return (
+				<View
+					style={{
+						width: 34,
+						height: 15,
+						borderRadius: 4,
+						borderWidth: 1.5,
+						borderColor: glyph,
+						flexDirection: 'row',
+						alignItems: 'center',
+						justifyContent: 'space-evenly',
+						marginTop: 9,
+					}}
+				>
+					{[0, 1, 2, 3].map(index => (
+						<View key={index} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: glyph }} />
+					))}
+				</View>
+			)
+		case 'tonal':
+			// M3: edge bar, filled tonal pill on the active item.
+			return (
+				<View
+					style={{
+						width: 34,
+						height: 15,
+						borderRadius: 4,
+						borderWidth: 1.5,
+						borderColor: edge,
+						flexDirection: 'row',
+						alignItems: 'center',
+						justifyContent: 'space-evenly',
+						marginTop: 9,
+					}}
+				>
+					<View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: PALETTE.label }} />
+					<View
+						style={{
+							width: 12,
+							height: 8,
+							borderRadius: 4,
+							backgroundColor: fill,
+						}}
+					/>
+					<View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: PALETTE.label }} />
+				</View>
+			)
+		case 'island':
+			// Liquid Glass: detached capsule with an accent dot.
+			return (
+				<View
+					style={{
+						width: 32,
+						height: 13,
+						borderRadius: 7,
+						borderWidth: 1.5,
+						borderColor: glyph,
+						backgroundColor: fade(0.18),
+						flexDirection: 'row',
+						alignItems: 'center',
+						justifyContent: 'space-evenly',
+						marginTop: 10,
+					}}
+				>
+					{[0, 1, 2].map(index => (
+						<View
+							key={index}
+							style={{
+								width: 5,
+								height: 5,
+								borderRadius: 2.5,
+								backgroundColor: index === 1 ? accent : PALETTE.label,
+							}}
+						/>
+					))}
+				</View>
+			)
+		case 'dock':
+			// Translucent iOS dock: hairline white border, sheen.
+			return (
+				<View
+					style={{
+						width: 32,
+						height: 14,
+						borderRadius: 8,
+						borderWidth: 1.5,
+						borderColor: 'rgba(255,255,255,0.55)',
+						backgroundColor: 'rgba(255,255,255,0.13)',
+						flexDirection: 'row',
+						alignItems: 'center',
+						justifyContent: 'space-evenly',
+						marginTop: 10,
+					}}
+				>
+					{[0, 1, 2].map(index => (
+						<View
+							key={index}
+							style={{
+								width: 5,
+								height: 5,
+								borderRadius: 2.5,
+								backgroundColor: index === 0 ? accent : PALETTE.label,
+							}}
+						/>
+					))}
+				</View>
+			)
+		case 'card':
+			// Chunky soft card bar.
+			return (
+				<View
+					style={{
+						width: 32,
+						height: 16,
+						borderRadius: 6,
+						borderWidth: 1.5,
+						borderColor: edge,
+						backgroundColor: fill,
+						marginTop: 9,
+						alignItems: 'center',
+						justifyContent: 'center',
+					}}
+				>
+					<View style={{ width: 14, height: 5, borderRadius: 2.5, backgroundColor: glyph }} />
+				</View>
+			)
+		case 'minimal':
+			// Minimal Line: hairline with a centred accent tick.
+			return (
+				<View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+					<View
+						style={{
+							width: 30,
+							height: 1.5,
+							borderRadius: 1,
+							backgroundColor: glyph,
+						}}
+					/>
+					<View
+						style={{
+							position: 'absolute',
+							top: 11,
+							width: 8,
+							height: 3,
+							borderRadius: 1.5,
+							backgroundColor: accent,
+						}}
+					/>
+				</View>
+			)
+	}
+}
+
+/** The navigation picker: a 2-column grid of themed cards. */
+function NavigationPicker(props: {
+	value: NavigationStyleId
+	onChange: (id: NavigationStyleId) => void
+}) {
+	const { Pressable } = reactNative()
+	const device = detectDevice()
+	const settings = getSettings()
+	const tokens = buildTokens(settings.visual, device.tier)
+
+	return (
+		<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 10 }}>
+			{NAVIGATION_STYLES.map(preset => {
+				const active = preset.id === props.value
+				return (
+					<Pressable
+						key={preset.id}
+						onPress={() => props.onChange(preset.id)}
+						style={{
+							flexBasis: '46%',
+							flexGrow: 1,
+							alignItems: 'center',
+							paddingVertical: 12,
+							paddingHorizontal: 6,
+							borderRadius: 14,
+							backgroundColor: active ? `${tokens.accent}1f` : PALETTE.chip,
+							borderWidth: active ? 1.5 : 1,
+							borderColor: active ? tokens.accent : PALETTE.border,
+						}}
+					>
+						<NavigationIcon navigation={preset.id} active={active} tokens={tokens} />
+						<Text
+							style={{
+								color: PALETTE.text,
+								fontSize: 13,
+								fontWeight: '600',
+								marginTop: 8,
+							}}
+						>
+							{preset.label}
+						</Text>
+						<Text
+							style={{
+								color: PALETTE.muted,
+								fontSize: 9.5,
+								marginTop: 2,
+								textAlign: 'center',
+							}}
+						>
+							{NAV_CAPTIONS[preset.id]}
+						</Text>
+					</Pressable>
+				)
+			})}
+		</View>
+	)
 }
 
 /** The style picker: a 2-column grid of themed cards. */

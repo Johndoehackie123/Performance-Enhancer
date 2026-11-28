@@ -22,6 +22,7 @@ import {
 	TEXT_COMPONENT_HINTS,
 	buildAvatarStyle,
 	buildMediaStyle,
+	buildNavigationBarStyle,
 	buildPanelStyle,
 	buildRecolorTable,
 	recolorStyleValue,
@@ -211,10 +212,18 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 						const tokens = options.getTokens()
 						return tokens ? buildMediaStyle(tokens) : undefined
 					}
-				: () => {
-						const tokens = options.getTokens()
-						return tokens ? buildPanelStyle(tokens) : undefined
-					}
+				: entry.surface === 'navigation'
+					? () => {
+							const tokens = options.getTokens()
+							// Navigation styles fall back to the panel treatment for the
+							// stock bar; the active-tab capsule needs host props and is
+							// applied on the stable path only.
+							return tokens ? buildNavigationBarStyle(tokens) ?? buildPanelStyle(tokens) : undefined
+						}
+					: () => {
+							const tokens = options.getTokens()
+							return tokens ? buildPanelStyle(tokens) : undefined
+						}
 
 		const unpatch = hookComponent(entry.component, styleFor, options.onError, options.getTokens)
 		if (!unpatch) continue

@@ -28,6 +28,8 @@ import { apiOrNull, jsxRuntime } from './bridge'
 import {
 	buildAvatarStyle,
 	buildMediaStyle,
+	buildNavigationActiveStyle,
+	buildNavigationBarStyle,
 	buildPanelStyle,
 	buildRecolorTable,
 	recolorStyleValue,
@@ -183,16 +185,31 @@ export function installStyles(options: StyleOptions): StyleHandle {
 			changed = true
 		}
 		if (tokens) {
-			// 3. Surface overlays for the enabled surfaces only.
+			// 3. Surface overlays for the enabled surfaces only. A navigation
+			// style other than Discord's stock bar replaces the panel treatment
+			// for the bar; active tab items additionally get a capsule.
 			const surface = surfaceOf(props, typeName, enabledNow())
-			const base = surface
-				? surface === 'images'
-					? buildMediaStyle(tokens)
-					: buildPanelStyle(tokens)
-				: undefined
-			if (base) {
-				next = mergeStyle(next, base as Record<string, unknown>)
-				changed = true
+			if (surface === 'navigation') {
+				const bar = buildNavigationBarStyle(tokens)
+				const base = bar ?? buildPanelStyle(tokens)
+				if (base) {
+					next = mergeStyle(next, base as Record<string, unknown>)
+					changed = true
+				}
+				const state = props.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
+				if (state && (state.selected === true || state.checked === true)) {
+					const active = buildNavigationActiveStyle(tokens)
+					if (active) {
+						next = mergeStyle(next, active as Record<string, unknown>)
+						changed = true
+					}
+				}
+			} else if (surface) {
+				const base = surface === 'images' ? buildMediaStyle(tokens) : buildPanelStyle(tokens)
+				if (base) {
+					next = mergeStyle(next, base as Record<string, unknown>)
+					changed = true
+				}
 			}
 		}
 

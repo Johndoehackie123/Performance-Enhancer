@@ -13,7 +13,7 @@
  *   card      — subtle rounded cards with a flat outline
  *   custom    — user-defined panel/accent colours, radius, transparency, border
  */
-import type { DeviceTier, GlassPreset, StyleId, SurfaceId, VisualSettings } from '../shared'
+import type { DeviceTier, GlassPreset, NavigationStyleId, StyleId, SurfaceId, VisualSettings } from '../shared'
 
 export interface StyleTokens {
 	/** Panel background, RGBA string. */
@@ -68,6 +68,17 @@ export interface StyleTokens {
 	avatarRadius: number
 	/** Letter tracking applied to text (0 = Discord default). */
 	letterSpacing: number
+	/* --- Navigation treatment (bottom tab bar) --- */
+	/** Resolved navigation style — 'auto' is already mapped to a concrete one. */
+	navigation: 'default' | 'tonal' | 'island' | 'dock' | 'card' | 'minimal'
+	/** Corner radius of floating navigation bars. */
+	navRadius: number
+	/** Opacity of the active tab capsule, 0–100. */
+	pillStrength: number
+	/** Skips shadow/elevation work on styled surfaces. */
+	reduceEffects: boolean
+	/** Draws translucent fills solid. */
+	reduceTransparency: boolean
 }
 
 export interface StylePresetMeta {
@@ -486,7 +497,12 @@ function blurFor(preset: GlassPreset, tier: DeviceTier): number {
 	return preset === 'heavy' ? 24 : preset === 'light' ? 8 : 16
 }
 
-const OFF_TOKENS: StyleTokens = {
+type RawTokens = Omit<
+	StyleTokens,
+	'navigation' | 'navRadius' | 'pillStrength' | 'reduceEffects' | 'reduceTransparency'
+>
+
+const OFF_TOKENS: RawTokens = {
 	background: 'transparent',
 	borderColor: 'transparent',
 	borderWidth: 0,
@@ -510,8 +526,71 @@ const OFF_TOKENS: StyleTokens = {
 	letterSpacing: 0,
 }
 
-/** Builds the style tokens for a visual configuration. Pure and cheap. */
-function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
+/** Strips the alpha channel from a 9-character `#rrggbbaa` colour. */
+function solidifyColor(color: string): string {
+	if (color.startsWith('#') && color.length === 9) return color.slice(0, 7)
+	return color
+}
+
+/**
+ * Maps the navigation choice onto the concrete navigation kind for a theme.
+ * 'auto' follows the visual theme, per the researched design languages:
+ * Material 3 ships an edge bar with an active tonal pill, glassmorphism /
+ * Liquid Glass ship a floating translucent dock, soft cards ship a chunky
+ * card container and everything else gets a quiet hairline edge bar.
+ */
+export function resolveNavigationStyle(
+	navigation: NavigationStyleId,
+	style: StyleId,
+): 'default' | 'tonal' | 'island' | 'dock' | 'card' | 'minimal' {
+	if (navigation !== 'auto') return navigation
+	switch (style) {
+		case 'material':
+			return 'tonal'
+		case 'glass':
+		case 'frost':
+			return 'dock'
+		case 'card':
+			return 'card'
+		case 'custom':
+		case 'off':
+		default:
+			return 'minimal'
+	}
+}
+
+/** Adds `rgba(...)` syntax around an `#rrggbb` colour. */
+export function hexToRgba(hex: string, alpha: number): string {
+	const value = hex.replace('#', '').padEnd(6, '0').slice(0, 6)
+	const r = Number.parseInt(value.slice(0, 2), 16)
+	const g = Number.parseInt(value.slice(2, 4), 16)
+	const b = Number.parseInt(value.slice(4, 6), 16)
+	if (![r, g, b].every(n => Number.isFinite(n))) return hex
+	return `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, alpha))})`
+}
+
+/** The selectable navigation treatments, in picker order. */
+export const NAVIGATION_STYLES: { id: NavigationStyleId; label: string; description: string }[] = [
+	{ id: 'auto', label: 'Auto', description: 'Follows the visual theme.' },
+	{ id: 'default', label: 'Discord default', description: 'The stock bottom tab bar, untouched.' },
+	{ id: 'tonal', label: 'Tonal Pill', description: 'Material 3 edge bar with a filled tonal active indicator.' },
+	{ id: 'island', label: 'Floating Island', description: 'Liquid Glass detached floating capsule.' },
+	{ id: 'dock', label: 'Glass Dock', description: 'iOS-style translucent floating dock.' },
+	{ id: 'card', label: 'Card Bar', description: 'Chunky soft-card container with a card capsule.' },
+	{ id: 'minimal', label: 'Minimal Line', description: 'Hairline edge bar; active tab shown by accent tint.' },
+]
+
+const clamp0_100 = (n: unknown, fallback: number) => {
+	const value = typeof n === 'number' && Number.isFinite(n) ? n : fallback
+	return Math.min(100, Math.max(0, Math.round(value)))
+}
+const clamp0_32 = (n: unknown, fallback: number) => {
+	const value = typeof n === 'number' && Number.isFinite(n) ? n : fallback
+	return Math.min(32, Math.max(0, Math.round(value)))
+}
+
+/** Builds the raw style tokens for a visual configuration. Pure and cheap. */
+function computeTokensRaw(visual: VisualSettings, tier: DeviceTier): RawTokens {
 	if (visual.style === 'off') return OFF_TOKENS
 
 	const base = panelFor(visual)
@@ -654,6 +733,34 @@ function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
 	}
 }
 
+/**
+ * Applies the cross-theme flags on top of a freshly built token set:
+ * navigation resolution, effect reduction and transparency reduction.
+ */
+function computeTokens(visual: VisualSettings, tier: DeviceTier): StyleTokens {
+	const raw = computeTokensRaw(visual, tier)
+	const reduceTransparency = visual.reduceTransparency === true
+	const reduceEffects = visual.reduceEffects === true || tier === 'low'
+	const solid = (color: string) => (reduceTransparency ? solidifyColor(color) : color)
+	return {
+		...raw,
+		background: solid(raw.background),
+		media: solid(raw.media),
+		base: solid(raw.base),
+		lowest: solid(raw.lowest),
+		lowestDeep: solid(raw.lowestDeep),
+		elevated: solid(raw.elevated),
+		hover: solid(raw.hover),
+		shadow: reduceEffects ? undefined : raw.shadow,
+		blur: reduceEffects ? 0 : raw.blur,
+		navigation: resolveNavigationStyle(visual.navigation ?? 'auto', visual.style),
+		navRadius: clamp0_32(visual.navRadius, 24),
+		pillStrength: clamp0_100(visual.pillStrength, 60),
+		reduceEffects,
+		reduceTransparency,
+	}
+}
+
 const tokenCache = new WeakMap<VisualSettings, Map<DeviceTier, StyleTokens>>()
 
 /**
@@ -707,6 +814,99 @@ export function buildMediaStyle(tokens: StyleTokens) {
 		borderWidth: tokens.borderWidth,
 		borderColor: tokens.borderColor,
 		overflow: 'hidden' as const,
+	}
+}
+
+/**
+ * Bottom navigation bar, per the resolved navigation style.
+ *
+ * Floating treatments detach horizontally (margins are declarative RN style
+ * props, so the screen's flex tree is untouched) and lift with the live
+ * elevation slider. Edge treatments stay flush and only draw a hairline.
+ * Returns `undefined` for 'default' so Discord's stock bar ships untouched.
+ */
+export function buildNavigationBarStyle(tokens: StyleTokens) {
+	if (tokens.navigation === 'default') return undefined
+	const floatInset = { marginHorizontal: 14, marginBottom: 12 }
+	const floatShadow = tokens.shadow ? { ...tokens.shadow } : undefined
+	const lift = floatShadow
+		? {
+				elevation: Math.max(floatShadow.elevation, 6),
+				shadowColor: floatShadow.color,
+				shadowOpacity: floatShadow.opacity,
+				shadowRadius: floatShadow.radius,
+				shadowOffset: { width: 0, height: floatShadow.offsetY },
+			}
+		: undefined
+	switch (tokens.navigation) {
+		case 'tonal':
+			return {
+				backgroundColor: tokens.elevated,
+				borderTopWidth: 1,
+				borderTopColor: hexToRgba(tokens.accent, 0.22),
+			}
+		case 'island':
+			return {
+				backgroundColor: tokens.elevated,
+				borderRadius: tokens.navRadius,
+				borderWidth: 1,
+				borderColor: tokens.borderColor,
+				...floatInset,
+				...lift,
+			}
+		case 'dock': {
+			const fill = tokens.reduceTransparency
+				? mixColors(tokens.lowest, '#ffffff', 0.12)
+				: hexToRgba(mixColors(tokens.lowest, '#ffffff', 0.12), 0.78)
+			return {
+				backgroundColor: fill,
+				borderRadius: tokens.navRadius,
+				borderWidth: 1,
+				borderColor: 'rgba(255,255,255,0.24)',
+				...floatInset,
+				...lift,
+			}
+		}
+		case 'card':
+			return {
+				backgroundColor: tokens.elevated,
+				borderRadius: tokens.navRadius,
+				borderWidth: 1,
+				borderColor: tokens.borderColor,
+				...floatInset,
+				...lift,
+			}
+		case 'minimal':
+			return {
+				backgroundColor: tokens.lowestDeep,
+				borderTopWidth: 1,
+				borderTopColor: hexToRgba(tokens.accent, 0.28),
+			}
+	}
+}
+
+/**
+ * Active-tab capsule. Applied to elements whose `accessibilityState.selected`
+ * is true (RN sets this on selectable tab items), never to the bar itself.
+ */
+export function buildNavigationActiveStyle(tokens: StyleTokens) {
+	if (tokens.navigation === 'default' || tokens.navigation === 'minimal') return undefined
+	const alpha = 0.12 + (0.45 * tokens.pillStrength) / 100
+	const fill = hexToRgba(tokens.accent, alpha)
+	const base = { backgroundColor: fill, paddingHorizontal: 10, paddingVertical: 3 }
+	switch (tokens.navigation) {
+		case 'tonal':
+		case 'island':
+			return { ...base, borderRadius: 999 }
+		case 'dock':
+			return {
+				...base,
+				borderRadius: 999,
+				borderWidth: 1,
+				borderColor: 'rgba(255,255,255,0.3)',
+			}
+		case 'card':
+			return { ...base, borderRadius: Math.min(tokens.navRadius, 14) }
 	}
 }
 
