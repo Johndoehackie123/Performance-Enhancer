@@ -30,6 +30,7 @@ import {
 	buildMediaStyle,
 	buildNavigationActiveStyle,
 	buildNavigationBarStyle,
+	navigationKind,
 	buildPanelStyle,
 	buildRecolorTable,
 	recolorStyleValue,
@@ -185,30 +186,36 @@ export function installStyles(options: StyleOptions): StyleHandle {
 			changed = true
 		}
 		if (tokens) {
-			// 3. Surface overlays for the enabled surfaces only. A navigation
-			// style other than Discord's stock bar replaces the panel treatment
-			// for the bar; active tab items additionally get a capsule.
+			// 3. Surface overlays for the enabled surfaces only.
 			const surface = surfaceOf(props, typeName, enabledNow())
-			if (surface === 'navigation') {
-				const bar = buildNavigationBarStyle(tokens)
-				const base = bar ?? buildPanelStyle(tokens)
-				if (base) {
-					next = mergeStyle(next, base as Record<string, unknown>)
-					changed = true
-				}
-				const state = props.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
-				if (state && (state.selected === true || state.checked === true)) {
-					const active = buildNavigationActiveStyle(tokens)
-					if (active) {
-						next = mergeStyle(next, active as Record<string, unknown>)
-						changed = true
-					}
-				}
-			} else if (surface) {
+			if (surface && surface !== 'navigation') {
 				const base = surface === 'images' ? buildMediaStyle(tokens) : buildPanelStyle(tokens)
 				if (base) {
 					next = mergeStyle(next, base as Record<string, unknown>)
 					changed = true
+				}
+			}
+			// 3b. Navigation treatment. Independent of the surface heuristics —
+			// RN tab containers rarely carry route-ish props, so the bar is found
+			// by component name, the RN tab role and navigator props instead.
+			// The bar detaches via margins; tab items must never receive them.
+			if (enabledNow().includes('navigation')) {
+				const kind = navigationKind(typeName, props)
+				if (kind === 'bar') {
+					const bar = buildNavigationBarStyle(tokens) ?? buildPanelStyle(tokens)
+					if (bar) {
+						next = mergeStyle(next, bar as Record<string, unknown>)
+						changed = true
+					}
+				} else if (kind === 'item') {
+					const state = props.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
+					if (state && (state.selected === true || state.checked === true)) {
+						const active = buildNavigationActiveStyle(tokens)
+						if (active) {
+							next = mergeStyle(next, active as Record<string, unknown>)
+							changed = true
+						}
+					}
 				}
 			}
 		}

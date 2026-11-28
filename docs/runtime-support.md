@@ -17,6 +17,20 @@ themed avatar ring), real Material 3 tonal elevation for raised tiers, the
 accent-tinted *Saturate highlights* wiring, and themed icons in the style
 picker.
 
+**1.5.1** fixes the 1.5.0 navigation styles never being detected on device.
+The stable hook discovered the bar through props no RN tab bar carries
+(`header`, `route`, `tabIndex`), and the active-tab capsule was gated behind
+the same check — so both were dead code. The hook now classifies elements
+directly, independent of the surface heuristics: `navigationKind` returns
+`'bar'` for container names/props (`MainTabBar`, `BottomTabBar`, `NavigationBar`,
+`NavigatorHeader`, `tabBar`/`bottomTabBar`/`focused`, …) and `'item'` for tab
+items (`accessibilityRole: 'tab'`, `*TabBarItem`/`BottomTabItem` names,
+`accessibilityState.selected` on tab-ish components or host touchables).
+Bars receive the bar treatment, items receive only the active capsule — items
+never get the floating margins. The modern path now also distinguishes bars
+from items (capsule-only on items) and discovers `TabBarItem`/`BottomTabItem`.
+The navigation treatment is unchanged otherwise.
+
 **1.5.0** adds **navigation styles**: the bottom tab bar takes a dedicated
 treatment. **Auto** maps the active theme to its native navigation language
 (Material 3 → edge bar with a filled tonal active pill, glassmorphism / Liquid
@@ -260,7 +274,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.0.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.1.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**

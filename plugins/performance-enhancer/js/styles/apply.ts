@@ -23,6 +23,8 @@ import {
 	buildAvatarStyle,
 	buildMediaStyle,
 	buildNavigationBarStyle,
+	buildNavigationActiveStyle,
+	navigationKind,
 	buildPanelStyle,
 	buildRecolorTable,
 	recolorStyleValue,
@@ -127,7 +129,7 @@ function tableFor(tokens: StyleTokens | undefined): Map<string, string> | undefi
 
 function decorate(
 	element: ReactElement<any>,
-	style: unknown,
+	overlays: unknown[],
 	getTokens?: () => StyleTokens | undefined,
 ): ReactElement<any> {
 	if (!isValidElement(element)) return element
@@ -143,9 +145,9 @@ function decorate(
 	const recolored = table ? recolorStyleValue(props.style, table) : props.style
 
 	const next: Record<string, unknown> = { ...props }
-	// Later entries win in React Native, so our overlay is applied after the
+	// Later entries win in React Native, so our overlays are applied after the
 	// element's own style.
-	next.style = style ? [recolored, style] : recolored
+	next.style = overlays.length ? [recolored, ...overlays] : recolored
 	return createElement(element.type as any, next as any)
 }
 
@@ -165,17 +167,25 @@ export interface VisualInstall {
 	cleanup(): void
 }
 
+type OverlayFactory = (
+	element: ReactElement<any>,
+	componentName: string,
+) => unknown[]
+
 /** Registers a decorating hook on a concrete component. */
 function hookComponent(
 	component: unknown,
-	buildStyle: () => unknown,
+	buildOverlays: OverlayFactory,
+	componentName: string,
 	onError?: (error: unknown) => void,
 	getTokens?: () => StyleTokens | undefined,
 ): (() => void) | undefined {
 	try {
 		return afterJSX(component as any, element => {
 			try {
-				return decorate(element as ReactElement<any>, buildStyle(), getTokens)
+				const props = (element as ReactElement<any>)?.props
+				const overlays = props ? buildOverlays(element as ReactElement<any>, componentName) : []
+				return decorate(element as ReactElement<any>, overlays, getTokens)
 			} catch (error) {
 				onError?.(error)
 				return element
@@ -206,26 +216,34 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 		// per session and every extra prop allocation adds up.
 		if (count >= 3) continue
 
-		const styleFor =
-			entry.surface === 'images'
-				? () => {
-						const tokens = options.getTokens()
-						return tokens ? buildMediaStyle(tokens) : undefined
-					}
-				: entry.surface === 'navigation'
-					? () => {
-							const tokens = options.getTokens()
-							// Navigation styles fall back to the panel treatment for the
-							// stock bar; the active-tab capsule needs host props and is
-							// applied on the stable path only.
-							return tokens ? buildNavigationBarStyle(tokens) ?? buildPanelStyle(tokens) : undefined
-						}
-					: () => {
-							const tokens = options.getTokens()
-							return tokens ? buildPanelStyle(tokens) : undefined
-						}
+		const overlaysFor: OverlayFactory = (element, name) => {
+			const tokens = options.getTokens()
+			if (!tokens) return []
+			if (entry.surface === 'images') {
+				const media = buildMediaStyle(tokens)
+				return media ? [media] : []
+			}
+			if (entry.surface === 'navigation') {
+				const kind = navigationKind(name, element.props as Record<string, unknown> | null)
+				if (kind === 'bar') {
+					const bar = buildNavigationBarStyle(tokens) ?? buildPanelStyle(tokens)
+					return bar ? [bar] : []
+				}
+				if (kind === 'item') {
+					const state = (element.props as Record<string, unknown> | undefined)?.accessibilityState as
+						| { selected?: boolean; checked?: boolean }
+						| undefined
+					const selected = !!state && (state.selected === true || state.checked === true)
+					const active = selected ? buildNavigationActiveStyle(tokens) : undefined
+					return active ? [active] : []
+				}
+				return []
+			}
+			const panel = buildPanelStyle(tokens)
+			return panel ? [panel] : []
+		}
 
-		const unpatch = hookComponent(entry.component, styleFor, options.onError, options.getTokens)
+		const unpatch = hookComponent(entry.component, overlaysFor, entry.name, options.onError, options.getTokens)
 		if (!unpatch) continue
 		perSurface.set(entry.surface, count + 1)
 		cleanups.push(unpatch)
@@ -248,8 +266,10 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 				component,
 				() => {
 					const tokens = options.getTokens()
-					return tokens && tokens.letterSpacing > 0 ? { letterSpacing: tokens.letterSpacing } : undefined
+					const tracking = tokens && tokens.letterSpacing > 0 ? { letterSpacing: tokens.letterSpacing } : undefined
+					return tracking ? [tracking] : []
 				},
+				name,
 				options.onError,
 				options.getTokens,
 			)
@@ -270,10 +290,12 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 				component,
 				() => {
 					const tokens = options.getTokens()
-					return tokens
+					const style = tokens
 						? buildAvatarStyle(tokens.accent, true, tokens.avatarRadius)
 						: ROUND_AVATAR_STYLE
+					return [style]
 				},
+				name,
 				options.onError,
 				options.getTokens,
 			)
