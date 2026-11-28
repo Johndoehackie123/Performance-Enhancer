@@ -5,11 +5,11 @@
   "plugins": {
     "johndoehackie123.performance-enhancer": {
       "name": "Performance Enhancer",
-      "description": "RAM and SoC aware performance, memory and stability tuning, plus Material, Glassmorphism, Liquid Frost and custom visual styles.",
+      "description": "RAM and SoC aware performance, memory and stability tuning, plus Material, Glassmorphism, Liquid Frost, soft cards and a fully custom visual style.",
       "author": "Johndoehackie123",
       "icon": "SparklesIcon",
       "channels": {
-        "latest": "1.2.3"
+        "latest": "1.3.0"
       },
       "versions": {
         "1.0.0": {
@@ -112,6 +112,22 @@
           "url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.3.zip",
           "sha256": "53245ae3ea9af4aae4ae61891bc24bfdc5645ece2ee5e4781c1e3ad068a49c48",
           "size": 12342,
+          "dependencies": {
+            "revenge.api": {
+              "version": ">=1.2.1 <2"
+            },
+            "discord": {
+              "version": "*"
+            },
+            "revenge.api.themes": {
+              "optional": true
+            }
+          }
+        },
+        "1.3.0": {
+          "url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.3.0.zip",
+          "sha256": "4a5a05395754acc1bd370526994c9b24ceea2ad61231bcebfd929db2bf5c9b94",
+          "size": 15292,
           "dependencies": {
             "revenge.api": {
               "version": ">=1.2.1 <2"
