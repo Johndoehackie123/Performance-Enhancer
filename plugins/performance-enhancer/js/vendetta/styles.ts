@@ -24,7 +24,8 @@
  * one rule prevents the plugin from inventing layout; a bad detector degrades
  * to "no visual change" instead of a broken screen.
  */
-import { apiOrNull, jsxRuntime } from './bridge'
+import { apiOrNull, jsxRuntime, react } from './bridge'
+import { remixNavigationChildren } from '../styles/navigation-remix'
 import {
 	buildAvatarStyle,
 	buildMediaStyle,
@@ -185,6 +186,54 @@ export function installStyles(options: StyleOptions): StyleHandle {
 			next = mergeStyle(next, { letterSpacing: tokens.letterSpacing })
 			changed = true
 		}
+		// Navigation treatment. Independent of the surface heuristics — RN tab
+		// containers rarely carry route-ish props, so the bar is found by
+		// component name, the RN tab role and navigator props instead. When the
+		// bar IS found, its whole subtree is remixed atomically: every tab item
+		// inside gets the proper treatment and the capsule, and nothing outside
+		// the bar is touched.
+		let childrenRemixed: unknown
+		if (tokens && enabledNow().includes('navigation')) {
+			const kind = navigationKind(typeName, props)
+			if (kind === 'bar') {
+				const bar = buildNavigationBarStyle(tokens) ?? buildPanelStyle(tokens)
+				if (bar) {
+					next = mergeStyle(next, bar as Record<string, unknown>)
+					changed = true
+				}
+				const React = react() as
+					| { createElement?: (type: any, cfg: any, ...c: any[]) => any; isValidElement?: (n: any) => boolean }
+					| undefined
+				if (React?.createElement && React.isValidElement) {
+					try {
+						const remixed = remixNavigationChildren(props.children, tokens, {
+							createElement: React.createElement.bind(React),
+							isValidElement: React.isValidElement.bind(React),
+						})
+						if (remixed !== props.children) {
+							childrenRemixed = remixed
+							changed = true
+						}
+					} catch {}
+				}
+			} else if (kind === 'item') {
+				// Items outside the bar subtree (react-navigation creates items inside
+				// the bar, but Discord may hoist them): capsule only, never margins.
+				const state = props.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
+				const selected =
+					typeof props.focused === 'boolean'
+						? props.focused
+						: !!state && (state.selected === true || state.checked === true)
+				if (selected) {
+					const active = buildNavigationActiveStyle(tokens)
+					if (active) {
+						next = mergeStyle(next, active as Record<string, unknown>)
+						changed = true
+					}
+				}
+			}
+		}
+
 		if (tokens) {
 			// 3. Surface overlays for the enabled surfaces only.
 			const surface = surfaceOf(props, typeName, enabledNow())
@@ -195,33 +244,11 @@ export function installStyles(options: StyleOptions): StyleHandle {
 					changed = true
 				}
 			}
-			// 3b. Navigation treatment. Independent of the surface heuristics —
-			// RN tab containers rarely carry route-ish props, so the bar is found
-			// by component name, the RN tab role and navigator props instead.
-			// The bar detaches via margins; tab items must never receive them.
-			if (enabledNow().includes('navigation')) {
-				const kind = navigationKind(typeName, props)
-				if (kind === 'bar') {
-					const bar = buildNavigationBarStyle(tokens) ?? buildPanelStyle(tokens)
-					if (bar) {
-						next = mergeStyle(next, bar as Record<string, unknown>)
-						changed = true
-					}
-				} else if (kind === 'item') {
-					const state = props.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
-					if (state && (state.selected === true || state.checked === true)) {
-						const active = buildNavigationActiveStyle(tokens)
-						if (active) {
-							next = mergeStyle(next, active as Record<string, unknown>)
-							changed = true
-						}
-					}
-				}
-			}
 		}
 
 		if (!changed) return undefined
 		hooked += 1
+		if (childrenRemixed !== undefined) return { ...props, style: next, children: childrenRemixed }
 		return { ...props, style: next }
 	}
 

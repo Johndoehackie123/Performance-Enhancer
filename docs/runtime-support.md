@@ -17,6 +17,19 @@ themed avatar ring), real Material 3 tonal elevation for raised tiers, the
 accent-tinted *Saturate highlights* wiring, and themed icons in the style
 picker.
 
+**1.5.2** fixes the 1.5.1 navigation treatment leaking onto ordinary
+buttons. The `selected` accessibility state is set by half of Discord's
+controls, so the global item rule painted capsules across the whole app. The
+fix moves item restyling **inside the tab bar subtree**: when the bar
+container is found (by name or navigator props), its entire child tree is
+rebuilt in one pass — every selectable tab item inside gets the active-tab
+capsule and nothing outside the bar is touched. The global fallback keeps only
+the safe signals (`accessibilityRole: 'tab'`, react-navigation's boolean
+`focused` prop, `*TabBarItem` names). `focused` moved from the bar heuristic
+to the item heuristic (it is an item prop in react-navigation). The modern
+path gained the same atomic remix for discovered bar components (capsule-only
+on items, unchanged bar). Tab items never receive the floating margins.
+
 **1.5.1** fixes the 1.5.0 navigation styles never being detected on device.
 The stable hook discovered the bar through props no RN tab bar carries
 (`header`, `route`, `tabIndex`), and the active-tab capsule was gated behind
@@ -274,7 +287,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.1.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.2.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**
