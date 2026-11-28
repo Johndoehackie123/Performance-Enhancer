@@ -17,6 +17,26 @@ themed avatar ring), real Material 3 tonal elevation for raised tiers, the
 accent-tinted *Saturate highlights* wiring, and themed icons in the style
 picker.
 
+**1.5.0** adds **navigation styles**: the bottom tab bar takes a dedicated
+treatment. **Auto** maps the active theme to its native navigation language
+(Material 3 → edge bar with a filled tonal active pill, glassmorphism / Liquid
+Frost → translucent floating Glass Dock, soft cards → chunky Card Bar, anything
+else → Minimal Line), and the new **Navigation** section picks one manually:
+Auto · Discord default · Tonal Pill · Floating Island · Glass Dock · Card Bar ·
+Minimal Line. Active tabs are detected through RN's `accessibilityState`
+(`selected`/`checked`), so only the selected tab carries the capsule — the bar
+itself never gets it. Floating treatments detach with declarative margins and
+lift with the elevation slider; edge treatments stay flush. **Active pill
+strength** (0–100) tunes the capsule opacity, **Bar corner radius** (0–32)
+shapes the floating bars. Two new **Rendering** toggles cut GPU work:
+*Reduce visual effects* drops shadow/elevation on styled surfaces, and
+*Reduce transparency* draws translucent fills solid. Navigation structure,
+panels and insets are untouched in every style — `MainTabBar` keeps its flex
+tree; only declarative style props change. The modern path renders the bar
+treatment through the discovered component hooks; the active-tab capsule is a
+stable-only feature (the modern discovery API does not expose per-item
+accessibility state).
+
 **1.4.0** gives every theme its own **layout language**, on top of the colour
 language. React Native draws Discord on a flex tree, so no theme can safely
 resize windows or rails; instead each style re-shapes the parts that are pure
@@ -240,7 +260,7 @@ ship again.
 **Stable clients** (Revenge Manager, RevengeXposed)
 
 1. Settings → Revenge → Plugins → **Install a plugin**
-2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.4.0.zip`
+2. Paste `https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.0.zip`
 3. Confirm the unproxied-source warning and enable the plugin.
 
 **Next clients**

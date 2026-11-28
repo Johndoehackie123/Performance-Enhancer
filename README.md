@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.4.0.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.0.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
@@ -146,6 +146,19 @@ Details:
   72 px rail, 240 px sidebars and the mobile bottom tab bar — stays untouched.
   Flip it off with **Theme layouts** under Appearance to keep the colours with
   Discord's stock spacing.
+- **Navigation styles**: the bottom tab bar re-styles per a dedicated picker —
+  **Auto** (follows the theme: Material → Tonal Pill, Glass/Frost → Glass Dock,
+  Soft Cards → Card Bar, everything else → Minimal Line), **Discord default**,
+  **Tonal Pill** (M3 edge bar, filled tonal active indicator), **Floating
+  Island** (detached Liquid Glass capsule), **Glass Dock** (translucent iOS
+  dock), **Card Bar** (chunky card container) and **Minimal Line** (hairline
+  edge bar with accent tint). Tune the active capsule with
+  **Active pill strength** and the floating bars with **Bar corner radius**
+  (0–32). Active tabs are detected through RN accessibility state; the bar's
+  flex tree, insets and structure are never touched.
+- **Rendering**: **Reduce visual effects** skips shadow/elevation work on
+  styled surfaces (low-end GPUs, battery); **Reduce transparency** draws glass
+  fills solid for readability and GPU savings.
 - **Register colour themes** adds all five palettes (Material, Glassmorphism,
   Liquid Frost, Soft Cards and your custom palette) to
   **Settings → Revenge → Themes**, with a light base generated from your panel
