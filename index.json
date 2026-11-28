@@ -9,7 +9,7 @@
       "author": "Johndoehackie123",
       "icon": "SparklesIcon",
       "channels": {
-        "latest": "1.4.0"
+        "latest": "1.5.0"
       },
       "versions": {
         "1.0.0": {
@@ -160,6 +160,22 @@
           "url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.4.0.zip",
           "sha256": "6b3db0087fd7461aa7cd91cb50ecb4f06b8f9d262b8fa65c47176476ec81d9e1",
           "size": 16869,
+          "dependencies": {
+            "revenge.api": {
+              "version": ">=1.2.1 <2"
+            },
+            "discord": {
+              "version": "*"
+            },
+            "revenge.api.themes": {
+              "optional": true
+            }
+          }
+        },
+        "1.5.0": {
+          "url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.0.zip",
+          "sha256": "3d5a346b9314dbc67fba1a9ec26d8d83941db1f49cf468586775f2c1fc857502",
+          "size": 18515,
           "dependencies": {
             "revenge.api": {
               "version": ">=1.2.1 <2"
