@@ -372,7 +372,7 @@ export function SettingsComponent({ api, onVisualChange, onTrim, hooks }: Settin
 				<TableRowGroup title="Extras">
 					<TableSwitchRow
 						label="Register colour themes"
-						subLabel="Adds Material, Glassmorphism and Liquid Frost to Settings > Revenge > Themes."
+						subLabel="Adds Material, Glassmorphism, Liquid Frost, Soft Cards and your custom palette to Settings > Revenge > Themes. Palettes stay in the picker until Discord restarts."
 						value={settings.visual.registerThemes}
 						onValueChange={value => writeVisual({ registerThemes: value })}
 					/>

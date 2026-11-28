@@ -21,7 +21,7 @@ import {
 	type Settings,
 	type StyleId,
 } from '../shared'
-import { GLASS_PRESETS, STYLE_PRESETS, SURFACES } from '../styles/engine'
+import { buildTokens, GLASS_PRESETS, STYLE_PRESETS, SURFACES } from '../styles/engine'
 import { capabilities, design, reactNative, toast } from './bridge'
 import { detectDevice } from './device'
 import { getDiagnostics, getSettings, setSettings, subscribe, subscribeDiagnostics } from './state'
@@ -574,6 +574,12 @@ export function SettingsScreen(_props?: unknown) {
 				) : null}
 			</Section>
 
+			{settings.visual.style !== 'off' ? (
+				<Section title="Live preview">
+					<PalettePreview settings={settings} />
+				</Section>
+			) : null}
+
 			{settings.visual.style === 'custom' ? (
 				<Section title="Custom style">
 					<ColorRow
@@ -696,7 +702,7 @@ export function SettingsScreen(_props?: unknown) {
 				/>
 				<Switch
 					label="Themes screen integration"
-					subLabel="Registers the Liquid Frost palette in the Revenge Themes screen."
+					subLabel="Adds Material, Glass, Frost, Cards and your custom palette to the Revenge Themes screen. Palettes stay in the picker until Discord restarts."
 					value={settings.visual.registerThemes}
 					onValueChange={registerThemes =>
 						patch({ visual: { ...settings.visual, registerThemes } })
@@ -711,7 +717,7 @@ export function SettingsScreen(_props?: unknown) {
 					value={`${diagnostics.trims} · ${formatBytes(diagnostics.bytesReleased)}`}
 				/>
 				<Stat label="Dropped dispatches" value={String(diagnostics.dropped)} />
-				<Stat label="Style hooks" value={String(diagnostics.hooked)} />
+				<Stat label="Elements restyled" value={String(diagnostics.hooked)} />
 				<Stat
 					label="Uptime"
 					value={`${Math.round((Date.now() - diagnostics.startedAt) / 1000)}s`}
@@ -723,8 +729,9 @@ export function SettingsScreen(_props?: unknown) {
 				<Stat label="Settings rows" value={caps.design ? 'native' : 'fallback'} />
 				<View style={{ paddingVertical: 10 }}>
 					<Text style={{ color: PALETTE.muted, fontSize: 12, lineHeight: 17 }}>
-						Changes apply live — no reload needed. If a surface does not change, reload
-						Discord once from the plugin menu.
+						Changes apply live across the whole app — chat, sidebar, headers, inputs and
+						accent controls are re-tinted to the active style. Round avatars and surface
+						panels keep working as before.
 					</Text>
 				</View>
 			</Section>
@@ -747,6 +754,85 @@ export function SettingsScreen(_props?: unknown) {
 				</Text>
 			</View>
 		</ScrollView>
+	)
+}
+
+/** A live mock of the active style, driven by the same tokens the UI uses. */
+function PalettePreview({ settings }: { settings: Settings }) {
+	const device = detectDevice()
+	const tokens = buildTokens(settings.visual, device.tier)
+	const swatch = (label: string, color: string) => (
+		<View key={label} style={{ alignItems: 'center', flex: 1 }}>
+			<View
+				style={{
+					width: 34,
+					height: 34,
+					borderRadius: 10,
+					backgroundColor: color,
+					borderWidth: 1,
+					borderColor: 'rgba(255,255,255,0.14)',
+				}}
+			/>
+			<Text style={{ color: PALETTE.muted, fontSize: 9, marginTop: 4 }}>{label}</Text>
+		</View>
+	)
+	return (
+		<View
+			style={{
+				borderRadius: tokens.radius,
+				backgroundColor: tokens.background,
+				borderWidth: tokens.borderWidth,
+				borderColor: tokens.borderColor,
+				margin: 8,
+				padding: 12,
+				overflow: 'hidden',
+			}}
+		>
+			<View style={{ flexDirection: 'row', alignItems: 'center' }}>
+				<View
+					style={{
+						width: 38,
+						height: 38,
+						borderRadius: settings.visual.roundAvatars ? 19 : 12,
+						backgroundColor: tokens.accentTintStrong,
+						alignItems: 'center',
+						justifyContent: 'center',
+						borderWidth: 1,
+						borderColor: tokens.accentTint,
+					}}
+				>
+					<Text style={{ color: tokens.accent, fontWeight: '700', fontSize: 15 }}>P</Text>
+				</View>
+				<View style={{ marginLeft: 12, flex: 1 }}>
+					<Text style={{ color: tokens.text, fontWeight: '600', fontSize: 13 }}>
+						Performance Enhancer{'  '}
+						<Text style={{ color: tokens.muted, fontWeight: '400', fontSize: 11 }}>12:00</Text>
+					</Text>
+					<Text style={{ color: tokens.muted, fontSize: 12, marginTop: 1 }}>
+						This is how messages and chrome will look.
+					</Text>
+					<Text style={{ color: tokens.accent, fontSize: 12, marginTop: 1 }}>
+						https://discord.com/preview
+					</Text>
+				</View>
+			</View>
+			<View
+				style={{
+					flexDirection: 'row',
+					marginTop: 12,
+					paddingTop: 10,
+					borderTopWidth: 1,
+					borderTopColor: tokens.accentTint,
+				}}
+			>
+				{swatch('Base', tokens.base)}
+				{swatch('Sidebar', tokens.lowest)}
+				{swatch('Deep', tokens.lowestDeep)}
+				{swatch('Raised', tokens.elevated)}
+				{swatch('Accent', tokens.accent)}
+				{swatch('Accent soft', tokens.accentSoft)}
+			</View>
+		</View>
 	)
 }
 

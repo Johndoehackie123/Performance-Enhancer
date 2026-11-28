@@ -21,6 +21,8 @@ import {
 	SURFACE_COMPONENT_HINTS,
 	buildMediaStyle,
 	buildPanelStyle,
+	buildRecolorTable,
+	recolorStyleValue,
 } from './engine'
 import type { StyleTokens } from './engine'
 import type { SurfaceId } from '../shared'
@@ -103,16 +105,44 @@ export function buildHintMap(surfaces: SurfaceId[]): Map<string, SurfaceId> {
  * components forward their own props instead) the element is left alone rather
  * than passing an unknown prop down the tree.
  */
-function decorate(element: ReactElement<any>, style: unknown): ReactElement<any> {
-	if (!isValidElement(element) || !style) return element
+// Memoised recolor state, shared with the stable hook. Tokens objects are
+// memoised in the engine, so reference equality is a valid cache key.
+let cachedTokens: StyleTokens | undefined
+let cachedTable: Map<string, string> | undefined
+function tableFor(tokens: StyleTokens | undefined): Map<string, string> | undefined {
+	if (!tokens) {
+		cachedTokens = undefined
+		cachedTable = undefined
+		return undefined
+	}
+	if (tokens !== cachedTokens) {
+		cachedTokens = tokens
+		cachedTable = buildRecolorTable(tokens)
+	}
+	return cachedTable
+}
+
+function decorate(
+	element: ReactElement<any>,
+	style: unknown,
+	getTokens?: () => StyleTokens | undefined,
+): ReactElement<any> {
+	if (!isValidElement(element)) return element
 	const props = element.props as Record<string, unknown> | null
 	if (!props || typeof props !== 'object') return element
 
 	// A `style` key being present is the signal that the component accepts one.
 	if (!('style' in props)) return element
 
+	// Structural recolor of whatever style the element already carries; this is
+	// what lets the active palette reach every surface, not just the panels.
+	const table = getTokens ? tableFor(getTokens()) : undefined
+	const recolored = table ? recolorStyleValue(props.style, table) : props.style
+
 	const next: Record<string, unknown> = { ...props }
-	next.style = [style, props.style]
+	// Later entries win in React Native, so our overlay is applied after the
+	// element's own style.
+	next.style = style ? [recolored, style] : recolored
 	return createElement(element.type as any, next as any)
 }
 
@@ -137,11 +167,12 @@ function hookComponent(
 	component: unknown,
 	buildStyle: () => unknown,
 	onError?: (error: unknown) => void,
+	getTokens?: () => StyleTokens | undefined,
 ): (() => void) | undefined {
 	try {
 		return afterJSX(component as any, element => {
 			try {
-				return decorate(element as ReactElement<any>, buildStyle())
+				return decorate(element as ReactElement<any>, buildStyle(), getTokens)
 			} catch (error) {
 				onError?.(error)
 				return element
@@ -183,7 +214,7 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 						return tokens ? buildPanelStyle(tokens) : undefined
 					}
 
-		const unpatch = hookComponent(entry.component, styleFor, options.onError)
+		const unpatch = hookComponent(entry.component, styleFor, options.onError, options.getTokens)
 		if (!unpatch) continue
 		perSurface.set(entry.surface, count + 1)
 		cleanups.push(unpatch)
@@ -204,6 +235,7 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 				component,
 				() => ROUND_AVATAR_STYLE,
 				options.onError,
+				options.getTokens,
 			)
 			if (!unpatch) continue
 			cleanups.push(unpatch)

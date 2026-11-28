@@ -34,6 +34,7 @@ import {
 	subscribe,
 } from './state'
 import { installStyles } from './styles'
+import { registerThemes } from '../styles/themes'
 import { SettingsScreen } from './ui'
 import type { PluginStorage } from './bridge'
 import type { RuntimeOptions } from './runtime'
@@ -41,12 +42,15 @@ import type { RuntimeOptions } from './runtime'
 interface Hooks {
 	disposeRuntime?: () => void
 	disposeStyles?: () => void
+	disposeThemes?: () => void
+	themesMounted: boolean
 	unsubscribeStore?: () => void
 	trim: () => { bytes: number; entries: number }
 }
 
 const hooks: Hooks = {
 	trim: () => ({ bytes: 0, entries: 0 }),
+	themesMounted: false,
 }
 
 /**
@@ -168,9 +172,51 @@ const options = definePlugin({
 		}
 		mountStyles()
 
+		// Themes are registered once per session: the Themes API reads colors
+		// lazily from `getColors`, so palette edits reach the Themes screen
+		// without re-registering. Re-registering on every keystroke would leak
+		// duplicate themes in the picker.
+		const mountThemes = (force = false) => {
+			const enabled = getSettings().visual.registerThemes
+			if (!enabled) {
+				if (hooks.themesMounted) {
+					hooks.disposeThemes?.()
+					hooks.disposeThemes = undefined
+					hooks.themesMounted = false
+				}
+				return
+			}
+			if (hooks.themesMounted && !force) return
+			hooks.disposeThemes?.()
+			hooks.disposeThemes = undefined
+			hooks.themesMounted = false
+			try {
+				const host = apiOrNull() as Record<string, any> | undefined
+				const themes = host?.themes
+				if (!themes) {
+					noteOnce('Themes API not available on this client; skipping palette registration')
+					return
+				}
+				const cleanup = registerThemes(
+					themes,
+					() => getSettings().visual,
+					detectDevice().tier,
+				)
+				hooks.disposeThemes = cleanup
+				hooks.themesMounted = true
+				noteOnce('registered color palettes in the Themes screen')
+			} catch (error) {
+				warn(`[perf] theme registration failed: ${String(error)}`)
+			}
+		}
+		mountThemes()
+
 		// Rebuild the style hooks whenever a setting that affects them changes.
 		hooks.unsubscribeStore?.()
-		hooks.unsubscribeStore = subscribe(mountStyles)
+		hooks.unsubscribeStore = subscribe(() => {
+			mountStyles()
+			mountThemes()
+		})
 
 		patchDiagnostics({ heapUsedMb: readHeap(), startedAt: Date.now() })
 
@@ -204,6 +250,9 @@ function release() {
 		hooks.unsubscribeStore = undefined
 		hooks.disposeStyles?.()
 		hooks.disposeStyles = undefined
+		hooks.disposeThemes?.()
+		hooks.disposeThemes = undefined
+		hooks.themesMounted = false
 		hooks.disposeRuntime?.()
 		hooks.disposeRuntime = undefined
 		hooks.trim = () => ({ bytes: 0, entries: 0 })
@@ -235,6 +284,15 @@ function logOnce() {
 	loggedIn = true
 	const device = detectDevice()
 	log(`loaded on ${device.summary} (${device.tier} tier)`)
+}
+
+const warnedOnce = new Set<string>()
+
+/** Logs a warning only the first time it is given the same key. */
+function noteOnce(message: string) {
+	if (warnedOnce.has(message)) return
+	warnedOnce.add(message)
+	warn(`[perf] ${message}`)
 }
 
 /**

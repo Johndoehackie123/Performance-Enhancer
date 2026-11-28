@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.2.3.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.3.0.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
@@ -126,20 +126,38 @@ Details:
 - Surfaces are individually toggleable: message rows, navigation bars, the
   composer, sheets/modals and media cards.
 - **Round avatars** clips avatars into circles.
-- **Register colour themes** adds the same palettes to
-  **Settings → Revenge → Themes** (needs the optional `revenge.api.themes`
-  plugin; the plugin works without it).
+- **The whole app re-tints**, not just the panels: chat, sidebar, headers,
+  inputs and every accent control are re-tinted to the active style, live, as
+  you change the palette.
+- **Register colour themes** adds all five palettes (Material, Glassmorphism,
+  Liquid Frost, Soft Cards and your custom palette) to
+  **Settings → Revenge → Themes**, with a light base generated from your panel
+  colour instead of Discord's stock whites. Needs the optional
+  `revenge.api.themes` plugin; the plugin works without it, and palette edits
+  made in the studio propagate to the Themes screen without re-registering.
+  Note: palettes registered through the Themes API stay in the picker until
+  Discord restarts — the API has no unregister.
 - A live preview renders the selected style with the exact token engine the
-  live surfaces use.
+  live surfaces use: a mock message, avatar and the derived base/accent tonal
+  scale, including your custom radius, border and transparency.
 
-Styles are applied through Revenge's JSX runtime hooks on discovered Discord
-components — never by patching render functions — so they keep working with
-React Compiler builds and can be removed cleanly when the plugin is disabled.
+Visual styles are applied in two layers, both of which come off cleanly when
+the plugin is disabled:
+
+1. **JSX runtime hooks** on `jsx`/`jsxs` (the calls every compiled component
+   makes), which re-tint the color props of every element that carries a style
+   object, using the tonal scale derived from the active style — never by
+   patching render functions, so React Compiler builds keep working.
+   Registered `StyleSheet` IDs are left untouched.
+2. **Themes registration**: the same palettes are exposed in
+   **Settings → Revenge → Themes** as raw `BRAND_*` overrides plus
+   dark/darker/midnight/light semantic maps, covering the parts of the UI
+   that never carry inline styles.
 
 ### Diagnostics
 
 Heap usage, cache trims, bytes released, gateway bursts, dispatch counts
-(seen/dropped), active style hooks, and uptime. **Trim now** and
+(seen/dropped), restyled elements, and uptime. **Trim now** and
 **Re-apply style** run the same code paths the plugin uses at runtime.
 
 ---
@@ -208,7 +226,7 @@ plugins/performance-enhancer/
 │   ├── shared.ts          settings types, defaults, migration
 │   ├── store.ts           runtime state + settings subscription
 │   ├── perf/              memory, network, stability guards
-│   ├── styles/            token engine, JSX hooks, Themes registration
+│   ├── styles/            token engine, JSX recolor hooks, Themes registration
 │   └── ui/                settings screen and preview
 scripts/                   packaging, index, release planning
 .github/workflows/         validate (PRs) and release (main)
