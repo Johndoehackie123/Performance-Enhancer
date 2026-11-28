@@ -44,6 +44,12 @@ export interface VisualSettings {
 	registerThemes: boolean
 	/** Rounds incoming avatar images. */
 	roundAvatars: boolean
+	/** Shadow/elevation strength of styled panels, 0-100 (50 is the preset value). */
+	elevation: number
+	/** Raises secondary text contrast for busy backgrounds. */
+	contrast: boolean
+	/** Draws an accent ring around circular avatars. */
+	avatarRing: boolean
 }
 
 export interface PerformanceSettings {
@@ -133,6 +139,9 @@ export const DEFAULT_SETTINGS: Settings = {
 		},
 		registerThemes: true,
 		roundAvatars: false,
+		elevation: 50,
+		contrast: false,
+		avatarRing: false,
 	},
 }
 
@@ -184,6 +193,7 @@ export function resolveSettings(
 		0.4,
 	)
 	merged.visual.custom.border = clampNumber(merged.visual.custom.border, 0, 4, 1)
+	merged.visual.elevation = clampNumber(merged.visual.elevation, 0, 100, 50)
 	return merged
 }
 

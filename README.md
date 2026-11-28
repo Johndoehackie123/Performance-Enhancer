@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.3.0.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.3.1.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
@@ -129,6 +129,15 @@ Details:
 - **The whole app re-tints**, not just the panels: chat, sidebar, headers,
   inputs and every accent control are re-tinted to the active style, live, as
   you change the palette.
+- **Themed icons & cards**: the style picker draws each studio with its own
+  glyph — the M3 tonal ladder grid, layered glass panes, a frost crystal,
+  stacked cards and staggered sliders — all tinted from your live accent.
+- **Appearance controls**: an elevation slider (0–100, scales every panel
+  shadow), a high-contrast text toggle for busy backdrops, and a themed accent
+  ring for circular avatars. Material's raised tiers use real tonal elevation
+  (tinted toward the accent, per Material 3), not just lighter greys; the
+  custom style's *Saturate highlights* tints panels and the accent family
+  toward your accent hue.
 - **Register colour themes** adds all five palettes (Material, Glassmorphism,
   Liquid Frost, Soft Cards and your custom palette) to
   **Settings → Revenge → Themes**, with a light base generated from your panel

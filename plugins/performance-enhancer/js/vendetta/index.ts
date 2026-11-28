@@ -164,6 +164,7 @@ const options = definePlugin({
 						id => getSettings().visual.surfaces[id],
 					),
 				roundAvatars: () => getSettings().visual.roundAvatars,
+				avatarRing: () => getSettings().visual.avatarRing,
 				onHooked: (hooked, missing) =>
 					patchDiagnostics({ hooked, missing }),
 				logger: runtimeOptions.logger,

@@ -6,8 +6,16 @@ manifest contract. 1.2.3 is the first release that is known to install, enable a
 open the settings screen on **Valenced** and on **Revenge** — 1.2.0 crashed in
 `init`, and 1.2.1/1.2.2 crashed when the settings screen mounted (see below).
 
-**1.3.0** reworks the visual styles so they apply to the whole app, not just the
-handful of components the JSX hooks could identify by name:
+**1.3.1** fixes a freeze on the settings screen introduced by 1.3.0. The JSX
+hook counted every decorated element and pushed the count into the diagnostics
+store on every 64th decoration; the settings screen re-renders on diagnostics,
+which re-decorates its tree and pushes again — an endless promote-render loop.
+Diagnostics are now reported from a slow (5 s) timer that is never fed by the
+render path, and the counter still shows live-ish under *Elements restyled*.
+1.3.1 also adds the Appearance controls (elevation scale, high-contrast text,
+themed avatar ring), real Material 3 tonal elevation for raised tiers, the
+accent-tinted *Saturate highlights* wiring, and themed icons in the style
+picker. The 1.3.0 mechanisms are otherwise unchanged:
 
 1. **Structural recolor layer.** The JSX hook now walks every element's `style`
    prop and substitutes Discord's stock palette (modern *and* legacy) for a

@@ -22,6 +22,7 @@ import {
 	type StyleId,
 } from '../shared'
 import { buildTokens, GLASS_PRESETS, STYLE_PRESETS, SURFACES } from '../styles/engine'
+import type { StyleTokens } from '../styles/engine'
 import { capabilities, design, reactNative, toast } from './bridge'
 import { detectDevice } from './device'
 import { getDiagnostics, getSettings, setSettings, subscribe, subscribeDiagnostics } from './state'
@@ -42,6 +43,15 @@ function rows() {
 		TableSwitchRow: components.TableSwitchRow,
 		TableRadioGroup: components.TableRadioGroup,
 	}
+}
+
+const STYLE_CAPTIONS: Record<StyleId, string> = {
+	off: 'Stock Discord, zero restyle',
+	material: 'Tonal elevation · Material 3',
+	glass: 'Translucent panes · blur 8–15px',
+	frost: 'Liquid frost · milky film',
+	card: 'Low-contrast soft cards',
+	custom: 'Your palette & shape',
 }
 
 const PALETTE = {
@@ -540,14 +550,8 @@ export function SettingsScreen(_props?: unknown) {
 			</Section>
 
 			<Section title="Visual style">
-				<Choice<StyleId>
-					title="Style"
+				<StylePicker
 					value={settings.visual.style}
-					options={STYLE_PRESETS.map(preset => ({
-						id: preset.id,
-						label: preset.label,
-						description: preset.description,
-					}))}
 					onChange={style => {
 						const preset = STYLE_PRESETS.find(entry => entry.id === style)
 						patch({
@@ -573,6 +577,38 @@ export function SettingsScreen(_props?: unknown) {
 					/>
 				) : null}
 			</Section>
+
+			{settings.visual.style !== 'off' ? (
+				<Section title="Appearance">
+					<Stepper
+						label="Elevation"
+						value={settings.visual.elevation}
+						unit="%"
+						step={10}
+						min={0}
+						max={100}
+						onChange={elevation =>
+							patch({ visual: { ...settings.visual, elevation } })
+						}
+					/>
+					<Switch
+						label="High-contrast text"
+						subLabel="Stronger secondary text for busy backgrounds and images."
+						value={settings.visual.contrast}
+						onValueChange={contrast =>
+							patch({ visual: { ...settings.visual, contrast } })
+						}
+					/>
+					<Switch
+						label="Themed avatar ring"
+						subLabel="An accent ring around circular avatars. Works with Round avatars."
+						value={settings.visual.avatarRing}
+						onValueChange={avatarRing =>
+							patch({ visual: { ...settings.visual, avatarRing } })
+						}
+					/>
+				</Section>
+			) : null}
 
 			{settings.visual.style !== 'off' ? (
 				<Section title="Live preview">
@@ -658,7 +694,7 @@ export function SettingsScreen(_props?: unknown) {
 					/>
 					<Switch
 						label="Saturate highlights"
-						subLabel="Tints panels with the accent colour instead of white."
+						subLabel="Tints panels and the accent family with the accent colour instead of neutral greys."
 						value={settings.visual.custom.saturate}
 						onValueChange={saturate =>
 							patch({
@@ -754,6 +790,224 @@ export function SettingsScreen(_props?: unknown) {
 				</Text>
 			</View>
 		</ScrollView>
+	)
+}
+
+/**
+ * Themed vector icons for each style, drawn with plain views.
+ *
+ * No assets are shipped; every glyph is geometry tinted from the live accent,
+ * so the picker always agrees with the active palette.
+ */
+function StyleIcon({ style, active, tokens }: { style: StyleId; active: boolean; tokens: StyleTokens }) {
+	const accent = tokens.accent
+	const fade = (alpha: number) => `${accent}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`
+	const glyph = active ? accent : PALETTE.label
+	const soft = active ? tokens.accentSoft : PALETTE.chip
+
+	switch (style) {
+		case 'off':
+			return (
+				<View
+					style={{
+						width: 34,
+						height: 34,
+						borderRadius: 17,
+						borderWidth: 2.5,
+						borderColor: glyph,
+						opacity: 0.85,
+					}}
+				/>
+			)
+		case 'material':
+			// The M3 tonal ladder: one hue, four steps of opacity.
+			return (
+				<View style={{ width: 34, height: 34, flexDirection: 'row', flexWrap: 'wrap', gap: 3 }}>
+					{[1, 0.72, 0.45, 0.22].map((alpha, index) => (
+						<View
+							key={index}
+							style={{
+								width: 15,
+								height: 15,
+								borderRadius: 5,
+								backgroundColor: fade(alpha),
+							}}
+						/>
+					))}
+				</View>
+			)
+		case 'glass':
+			// Layered translucent panes with a hairline highlight.
+			return (
+				<View style={{ width: 34, height: 34 }}>
+					<View
+						style={{
+							position: 'absolute',
+							left: 0,
+							top: 6,
+							width: 20,
+							height: 20,
+							borderRadius: 10,
+							backgroundColor: 'rgba(255,255,255,0.18)',
+							borderWidth: 1,
+							borderColor: 'rgba(255,255,255,0.45)',
+						}}
+					/>
+					<View
+						style={{
+							position: 'absolute',
+							left: 12,
+							top: 2,
+							width: 22,
+							height: 22,
+							borderRadius: 11,
+							backgroundColor: fade(0.38),
+							borderWidth: 1,
+							borderColor: 'rgba(255,255,255,0.55)',
+						}}
+					/>
+				</View>
+			)
+		case 'frost':
+			// A frost crystal: three bars at 60° plus a cool core.
+			return (
+				<View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+					{[0, 60, 120].map(degrees => (
+						<View
+							key={degrees}
+							style={{
+								position: 'absolute',
+								width: 26,
+								height: 3.5,
+								borderRadius: 2,
+								backgroundColor: active ? '#eaf2fb' : PALETTE.label,
+								transform: [{ rotate: `${degrees}deg` }],
+								opacity: 0.9,
+							}}
+						/>
+					))}
+					<View
+						style={{
+							position: 'absolute',
+							width: 7,
+							height: 7,
+							borderRadius: 3.5,
+							backgroundColor: active ? '#eaf2fb' : PALETTE.label,
+						}}
+					/>
+				</View>
+			)
+		case 'card':
+			// Two stacked, offset cards.
+			return (
+				<View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+					<View
+						style={{
+							position: 'absolute',
+							width: 24,
+							height: 16,
+							borderRadius: 6,
+							backgroundColor: fade(0.4),
+							transform: [{ rotate: '-7deg' }],
+						}}
+					/>
+					<View
+						style={{
+							position: 'absolute',
+							left: 4,
+							top: 13,
+							width: 24,
+							height: 16,
+							borderRadius: 6,
+							backgroundColor: PALETTE.chip,
+							borderWidth: 1.5,
+							borderColor: soft === PALETTE.chip ? PALETTE.border : soft,
+						}}
+					/>
+				</View>
+			)
+		case 'custom':
+			// Three staggered sliders.
+			return (
+				<View style={{ width: 34, height: 34, justifyContent: 'center', gap: 5 }}>
+					{[0.7, 0.35, 0.85].map((stop, index) => (
+						<View
+							key={index}
+							style={{ height: 3.5, borderRadius: 2, backgroundColor: PALETTE.chip, width: 32 }}
+						>
+							<View
+								style={{
+									position: 'absolute',
+									left: stop * 23,
+									top: -3.25,
+									width: 10,
+									height: 10,
+									borderRadius: 5,
+									backgroundColor: accent,
+								}}
+							/>
+						</View>
+					))}
+				</View>
+			)
+	}
+}
+
+/** The style picker: a 2-column grid of themed cards. */
+function StylePicker(props: {
+	value: StyleId
+	onChange: (id: StyleId) => void
+}) {
+	const { Pressable } = reactNative()
+	const device = detectDevice()
+	const settings = getSettings()
+	const tokens = buildTokens(settings.visual, device.tier)
+
+	return (
+		<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 10 }}>
+			{STYLE_PRESETS.map(preset => {
+				const active = preset.id === props.value
+				return (
+					<Pressable
+						key={preset.id}
+						onPress={() => props.onChange(preset.id)}
+						style={{
+							flexBasis: '46%',
+							flexGrow: 1,
+							alignItems: 'center',
+							paddingVertical: 12,
+							paddingHorizontal: 6,
+							borderRadius: 14,
+							backgroundColor: active ? `${tokens.accent}1f` : PALETTE.chip,
+							borderWidth: active ? 1.5 : 1,
+							borderColor: active ? tokens.accent : PALETTE.border,
+						}}
+					>
+						<StyleIcon style={preset.id} active={active} tokens={tokens} />
+						<Text
+							style={{
+								color: PALETTE.text,
+								fontSize: 13,
+								fontWeight: '600',
+								marginTop: 8,
+							}}
+						>
+							{preset.label}
+						</Text>
+						<Text
+							style={{
+								color: PALETTE.muted,
+								fontSize: 9.5,
+								marginTop: 2,
+								textAlign: 'center',
+							}}
+						>
+							{STYLE_CAPTIONS[preset.id]}
+						</Text>
+					</Pressable>
+				)
+			})}
+		</View>
 	)
 }
 
