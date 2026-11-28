@@ -213,7 +213,9 @@ function applyFromSettings() {
 	if (visual.registerThemes) {
 		try {
 			const themes = (revenge as unknown as { themes?: ThemesApi }).themes
-			const cleanup = themes ? registerThemes(themes, visual, device.tier) : undefined
+			const cleanup = themes
+				? registerThemes(themes, () => getState().settings.visual, device.tier)
+				: undefined
 			runtime.themesCleanup = cleanup || undefined
 		} catch (error) {
 			logger.warn(`[perf] theme registration failed: ${String(error)}`)

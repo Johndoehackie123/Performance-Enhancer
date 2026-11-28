@@ -6,13 +6,32 @@
  * this module hooks the JSX runtime that Discord's compiled components actually
  * call (`jsx` / `jsxs`) and falls back to `React.createElement`.
  *
+ * Every style edit lands live: tokens are re-read per element from the settings
+ * store (memoised, so this is cheap), which means changing the custom palette in
+ * the studio repaints already-rendered surfaces on their next render instead of
+ * requiring a plugin reload.
+ *
+ * What gets applied, per element, in order:
+ *   1. **Structural recolor** — any color in Discord's stock palettes (modern
+ *      and legacy) is swapped for the tonal scale derived from the active
+ *      style's panel/accent. Only color keys are touched; layout never moves.
+ *      Registered `StyleSheet` IDs and non-object styles pass through.
+ *   2. **Avatar rounding** — independent of the style.
+ *   3. **Surface overlays** — panel/media sheets for the surfaces the user
+ *      enabled in the studio.
+ *
  * A style is applied only to elements that already carry a `style` prop. That
- * one rule prevents the plugin from changing Discord's layout: it can restyle a
- * surface, but it can never introduce one, so a bad selector degrades to "no
- * visual change" instead of a broken screen.
+ * one rule prevents the plugin from inventing layout; a bad detector degrades
+ * to "no visual change" instead of a broken screen.
  */
 import { apiOrNull, jsxRuntime } from './bridge'
-import { buildMediaStyle, buildPanelStyle, ROUND_AVATAR_STYLE } from '../styles/engine'
+import {
+	buildMediaStyle,
+	buildPanelStyle,
+	buildRecolorTable,
+	recolorStyleValue,
+	ROUND_AVATAR_STYLE,
+} from '../styles/engine'
 import type { StyleTokens } from '../styles/engine'
 import type { SurfaceId } from '../shared'
 import type { Logger } from './bridge'
@@ -62,7 +81,7 @@ function surfaceOf(props: Record<string, unknown>, typeName: string, enabled: Su
 	return undefined
 }
 
-/** Merges our tokens into an existing style value without dropping it. */
+/** Merges our style into an existing style value without dropping it. */
 function mergeStyle(existing: unknown, overlay: Record<string, unknown>) {
 	if (Array.isArray(existing)) return [...existing, overlay]
 	if (existing && typeof existing === 'object') return [existing, overlay]
@@ -70,37 +89,98 @@ function mergeStyle(existing: unknown, overlay: Record<string, unknown>) {
 }
 
 export function installStyles(options: StyleOptions): StyleHandle {
-	const enabled = options.enabledSurfaces()
-	const tokens = options.getTokens()
 	let hooked = 0
+	let reported = -1
+
+	// Memoised recolor state. `getTokens()` is memoised in the engine, so the
+	// same visual yields the same tokens object and this compare is a pointer
+	// check; a palette edit invalidates it naturally.
+	let cachedTokens: StyleTokens | undefined
+	let cachedTable: Map<string, string> | undefined
+	// Shared cache for the structural walker: identical style objects recur
+	// thousands of times per render pass, so per-key lookups dominate. It is
+	// rebuilt whenever the palette changes so stale recolors never stick.
+	let styleCache = new Map<object, unknown>()
+
+	// Enabled surfaces are re-read on a short timer: the settings closure
+	// allocates a fresh array on every call, which would run thousands of
+	// times per second during scroll.
+	let enabledCache: { at: number; value: SurfaceId[] } | undefined
+	const enabledNow = () => {
+		const now = Date.now()
+		if (enabledCache && now - enabledCache.at < 250) return enabledCache.value
+		const value = options.enabledSurfaces()
+		enabledCache = { at: now, value }
+		return value
+	}
+
+	const tableFor = (tokens: StyleTokens | undefined) => {
+		if (!tokens) {
+			cachedTokens = undefined
+			cachedTable = undefined
+			return undefined
+		}
+		if (tokens !== cachedTokens) {
+			cachedTokens = tokens
+			cachedTable = buildRecolorTable(tokens)
+			styleCache = new Map()
+		}
+		return cachedTable
+	}
+
+	const reportHooked = () => {
+		// Throttle diagnostics updates: at most one per 64 decorated elements,
+		// plus whenever the delta crosses a boundary on dispose.
+		if (hooked - reported >= 64) {
+			reported = hooked
+			try {
+				options.onHooked(hooked, 0)
+			} catch {}
+		}
+	}
 
 	/** Returns the replacement props, or `undefined` to leave the element alone. */
 	const decorate = (type: any, props: any) => {
 		if (!props || typeof props !== 'object') return undefined
 		if (!('style' in props)) return undefined
 
-		const typeName = nameOf(type)
+		const tokens = options.getTokens()
+		const table = tableFor(tokens)
 
-		if (options.roundAvatars() && AVATAR_HINTS.some(hint => typeName.includes(hint))) {
-			hooked += 1
-			return {
-				...props,
-				style: mergeStyle(props.style, ROUND_AVATAR_STYLE),
+		// 1. Structural recolor of whatever style the element carries.
+		let next: unknown = props.style
+		let changed = false
+		if (table) {
+			const recolored = recolorStyleValue(props.style, table, styleCache)
+			if (recolored !== props.style) {
+				next = recolored
+				changed = true
 			}
 		}
 
-		if (!tokens) return undefined
-		const surface = surfaceOf(props, typeName, enabled)
-		if (!surface) return undefined
+		// 2. Avatar rounding (independent of the style).
+		const typeName = nameOf(type)
+		if (options.roundAvatars() && AVATAR_HINTS.some(hint => typeName.includes(hint))) {
+			next = mergeStyle(next, ROUND_AVATAR_STYLE)
+			changed = true
+		} else if (tokens) {
+			// 3. Surface overlays for the enabled surfaces only.
+			const surface = surfaceOf(props, typeName, enabledNow())
+			const base = surface
+				? surface === 'images'
+					? buildMediaStyle(tokens)
+					: buildPanelStyle(tokens)
+				: undefined
+			if (base) {
+				next = mergeStyle(next, base as Record<string, unknown>)
+				changed = true
+			}
+		}
 
-		// Images get the media tint; every other surface gets the panel treatment.
-		// Both builders return `undefined` for the "off" style, which means the
-		// element is left exactly as Discord rendered it.
-		const base = surface === 'images' ? buildMediaStyle(tokens) : buildPanelStyle(tokens)
-		if (!base) return undefined
-
+		if (!changed) return undefined
 		hooked += 1
-		return { ...props, style: mergeStyle(props.style, base as Record<string, unknown>) }
+		reportHooked()
+		return { ...props, style: next }
 	}
 
 	const disposers: (() => void)[] = []
@@ -156,7 +236,7 @@ export function installStyles(options: StyleOptions): StyleHandle {
 		}
 	} catch {}
 
-	options.onHooked(hooked, 0)
+	options.onHooked(0, 0)
 
 	return {
 		get hooked() {
@@ -169,6 +249,9 @@ export function installStyles(options: StyleOptions): StyleHandle {
 					dispose()
 				} catch {}
 			}
+			try {
+				options.onHooked(hooked, 0)
+			} catch {}
 		},
 	}
 }

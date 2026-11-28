@@ -6,6 +6,33 @@ manifest contract. 1.2.3 is the first release that is known to install, enable a
 open the settings screen on **Valenced** and on **Revenge** — 1.2.0 crashed in
 `init`, and 1.2.1/1.2.2 crashed when the settings screen mounted (see below).
 
+**1.3.0** reworks the visual styles so they apply to the whole app, not just the
+handful of components the JSX hooks could identify by name:
+
+1. **Structural recolor layer.** The JSX hook now walks every element's `style`
+   prop and substitutes Discord's stock palette (modern *and* legacy) for a
+   tonal scale derived from the active style — `BACKGROUND_BASE_*`
+   backgrounds, text tiers and the whole `BRAND_*` accent family follow the
+   active panel/accent. It touches only color keys (`backgroundColor`,
+   `color`, borders, shadows…), never layout, and passes registered
+   `StyleSheet` IDs through untouched. It is memoised per style object,
+   rebuilt whenever the palette changes, and therefore applies live with no
+   reload.
+2. **Themes API everywhere.** Palette registration now runs on the stable
+   build too (it was Next-only), registers all five palettes (Material,
+   Glassmorphism, Liquid Frost, Soft Cards, Custom) instead of four, reads
+   colors lazily from live settings (edits propagate to the Themes screen
+   without re-registering), generates the light base by lifting the panel
+   toward white instead of hard-coded greys, and derives a full `BRAND_*`
+   scale and the modifier/text tiers from the same tonal scale the JSX layer
+   uses — so both layers always agree.
+3. **Known limits.** The Themes API has no unregister: palettes registered by
+   the plugin stay in the picker until Discord restarts. The structural
+   recolor cannot decode numeric `StyleSheet` IDs — surfaces painted through
+   registered styles only pick up the palette through the Themes registration
+   or Discord's own theme resolver. Discord builds that remove inline styles
+   from Hermes bytecode entirely would see no effect either way.
+
 | | Stable (Revenge Manager, RevengeXposed) | Next (`revenge-bundle-next`) | Valenced (`valenced`) |
 | --- | --- | --- | --- |
 | Install UI | Settings → Revenge → Plugins → **Install a plugin** (URL) | Settings → Revenge → Plugins → gear → **Add repository** | Settings → Valenced → Plugins → **Add repository**, or **Install plugin from file** |
