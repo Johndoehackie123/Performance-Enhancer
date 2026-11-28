@@ -9,7 +9,7 @@
 			"author": "Johndoehackie123",
 			"icon": "SparklesIcon",
 			"channels": {
-				"latest": "1.5.0"
+				"latest": "1.5.1"
 			},
 			"versions": {
 				"1.2.0": {
@@ -107,6 +107,19 @@
 					"url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/valenced/johndoehackie123.performance-enhancer@1.5.0.zip",
 					"sha256": "bd7b347de1b10b8e5f1a6de92047be5e220a879f8e7c3b7db004048a838715e3",
 					"size": 18489,
+					"dependencies": {
+						"valenced.api": {
+							"version": ">=1 <2"
+						},
+						"discord": {
+							"version": "*"
+						}
+					}
+				},
+				"1.5.1": {
+					"url": "https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/valenced/johndoehackie123.performance-enhancer@1.5.1.zip",
+					"sha256": "5b0d7cbf828ebbed814a690b9bb0f338ba05ee129101d1243cfe92397e2dd289",
+					"size": 18703,
 					"dependencies": {
 						"valenced.api": {
 							"version": ">=1 <2"
