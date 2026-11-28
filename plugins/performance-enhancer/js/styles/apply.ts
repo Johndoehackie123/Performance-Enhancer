@@ -265,8 +265,8 @@ export function installVisualHooks(options: InstallVisualOptions): VisualInstall
 						const tokens = options.getTokens()
 						if (!tokens) return element.props?.children
 						return remixNavigationChildren(element.props?.children, tokens, {
-							createElement,
-							isValidElement,
+							createElement: createElement,
+							isValidElement: isValidElement,
 						})
 					}
 				: undefined
