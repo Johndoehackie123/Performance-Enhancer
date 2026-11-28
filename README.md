@@ -45,7 +45,7 @@ the repository index.
 3. Paste this ZIP URL:
 
    ```
-   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.0.zip
+   https://raw.githubusercontent.com/Johndoehackie123/Performance-Enhancer/gh-pages/pool/johndoehackie123.performance-enhancer@1.5.1.zip
    ```
 
 4. Confirm the "unproxied external source" warning, then enable the plugin.
@@ -146,7 +146,7 @@ Details:
   72 px rail, 240 px sidebars and the mobile bottom tab bar — stays untouched.
   Flip it off with **Theme layouts** under Appearance to keep the colours with
   Discord's stock spacing.
-- **Navigation styles**: the bottom tab bar re-styles per a dedicated picker —
+- **Navigation styles** (fixed in 1.5.1): the bottom tab bar re-styles per a dedicated picker —
   **Auto** (follows the theme: Material → Tonal Pill, Glass/Frost → Glass Dock,
   Soft Cards → Card Bar, everything else → Minimal Line), **Discord default**,
   **Tonal Pill** (M3 edge bar, filled tonal active indicator), **Floating

@@ -176,7 +176,7 @@ export const SURFACES: { id: SurfaceId; label: string; description: string }[] =
 /** Discord component names the styling layer looks for, per surface. */
 export const SURFACE_COMPONENT_HINTS: Record<SurfaceId, string[]> = {
 	messages: ['MessageContent', 'ChatMessageContent', 'MessageRow', 'MessageGroup'],
-	navigation: ['MainTabBar', 'TabBar', 'BottomTabBar', 'NavigationBar', 'NavigatorHeader'],
+	navigation: ['MainTabBar', 'TabBar', 'BottomTabBar', 'NavigationBar', 'NavigatorHeader', 'TabBarItem', 'BottomTabItem'],
 	input: ['ChatInput', 'ChatInputRoot', 'MessageInput', 'ChatInputContainer'],
 	sheets: ['ActionSheet', 'ActionSheetContent', 'BottomSheet', 'BottomSheetContent'],
 	images: ['MediaItem', 'EmbedImage', 'AttachmentImage', 'MessageImage'],
@@ -567,6 +567,41 @@ export function hexToRgba(hex: string, alpha: number): string {
 	const b = Number.parseInt(value.slice(4, 6), 16)
 	if (![r, g, b].every(n => Number.isFinite(n))) return hex
 	return `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, alpha))})`
+}
+
+/**
+ * Classifies an element as the navigation *bar* or a navigation *tab item*.
+ *
+ * The two must never receive each other's treatment: floating bars detach
+ * with margins, tab items must stay flex-sized or the bar's layout breaks.
+ * Detection works off the component name, the RN tab role and navigator
+ * props, because RN's accessibility tree is the only cross-build signal the
+ * JSX hooks receive.
+ */
+export function navigationKind(
+	typeName: string,
+	props?: Record<string, unknown> | null,
+): 'bar' | 'item' | undefined {
+	const t = typeName || ''
+	const role = props?.accessibilityRole
+	const state = props?.accessibilityState as { selected?: boolean; checked?: boolean } | undefined
+	const selected = !!state && (state.selected === true || state.checked === true)
+	// Tab items first: explicit tab role, *Item names in a nav context, or a
+	// selected element whose name mentions tabs. Host touchables carrying a
+	// selected state are almost always tab-like controls too — give them the
+	// capsule; the worst case is an accent pill on a pressed control.
+	if (role === 'tab') return 'item'
+	if (/item/i.test(t) && /tab|navigation|nav/i.test(t)) return 'item'
+	if (selected && /tab/i.test(t)) return 'item'
+	if (selected && /^(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|Touchable)/.test(t)) return 'item'
+	// The bar itself: container names and navigator props.
+	if (/tabbar|bottomtab|navigationbar|navigatorheader|maintabbar|toptabs/i.test(t)) return 'bar'
+	if (props) {
+		if (['tabBar', 'bottomTabBar', 'focused'].some(key => key in props)) return 'bar'
+		if ('header' in props && /nav/i.test(t)) return 'bar'
+		if ('tabIndex' in props) return 'bar'
+	}
+	return undefined
 }
 
 /** The selectable navigation treatments, in picker order. */
